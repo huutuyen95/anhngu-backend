@@ -1,0 +1,54 @@
+name: CI Backend
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_DATABASE: anh_ngu_test
+          MYSQL_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_mysql, mbstring, zip, bcmath, intl, gd
+          coverage: none
+
+      - name: Cài dependency
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Chuẩn bị .env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+        env:
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: anh_ngu_test
+          DB_USERNAME: root
+          DB_PASSWORD: root
+
+      - name: Lint (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Chạy test
+        run: php artisan test
+        env:
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: anh_ngu_test
+          DB_USERNAME: root
+          DB_PASSWORD: root
