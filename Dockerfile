@@ -1,27 +1,29 @@
 # ---- backend repo: Dockerfile (php-fpm cho Laravel) ----
-FROM php:8.3-fpm-alpine
+FROM php:8.4-fpm-alpine
 
-# Thư viện hệ thống + extension PHP cần cho Laravel
-RUN apk add --no-cache \
-        git curl bash libpng-dev libzip-dev icu-dev oniguruma-dev mysql-client \
-    && docker-php-ext-install pdo_mysql mbstring zip exif pcntl bcmath gd intl \
-    && apk add --no-cache --virtual .redis-deps $PHPIZE_DEPS \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
-    && apk del .redis-deps
+# Cài extension bằng công cụ chính thức (tự lo thư viện phụ thuộc + dọn dẹp)
+ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+RUN chmod +x /usr/local/bin/install-php-extensions \
+    && install-php-extensions \
+        pdo_mysql mbstring zip exif pcntl bcmath gd intl redis
 
-# Composer (copy binary từ image chính thức)
+RUN apk add --no-cache git curl bash
+
+# Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Cache layer: cài dependency trước khi copy toàn bộ source
+# 1) Cache layer: cài dependency trước (KHÔNG chạy script, chưa dựng autoloader)
 COPY composer.json composer.lock ./
-RUN composer install --no-scripts --no-autoloader --no-interaction --prefer-dist
+RUN composer install --no-interaction --prefer-dist --no-scripts --no-autoloader
 
-# Copy source
+# 2) Copy toàn bộ source
 COPY . .
-RUN composer dump-autoload --optimize \
+
+# 3) Dựng autoloader (KHÔNG chạy artisan package:discover lúc build -> tránh lỗi)
+RUN composer dump-autoload --optimize --no-scripts \
+    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint
