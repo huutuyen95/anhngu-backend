@@ -21,6 +21,8 @@ class TestAttempt extends Model
         'total_score',
         'correct_count',
         'question_count',
+        'attempt_count',
+        'last_attempted_at',
         'status',
     ];
 
@@ -29,6 +31,7 @@ class TestAttempt extends Model
         return [
             'started_at' => 'datetime',
             'submitted_at' => 'datetime',
+            'last_attempted_at' => 'datetime',
             'total_score' => 'decimal:2',
         ];
     }

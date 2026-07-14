@@ -51,4 +51,9 @@ class Test extends Model
     {
         return $this->hasMany(TestAttempt::class);
     }
+
+    public function questionCount(): int
+    {
+        return Question::whereHas('section.part', fn ($query) => $query->where('test_id', $this->id))->count();
+    }
 }
