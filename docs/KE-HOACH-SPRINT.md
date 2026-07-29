@@ -1,5 +1,10 @@
 # Kế hoạch Sprint — Dự án Anh ngữ (MVP trong 1 tháng)
 
+> **⚠️ CẬP NHẬT (2026-07-27, theo sheet chốt — xem `DAC-TA-CHUC-NANG.md`):**
+> - **Sprint 2** thêm **dạng câu Nghe (audio)** + **word count writing** vào cốt lõi (trước để backlog).
+> - **Sprint 3** thêm **category đề gắn theo lớp** (mỗi lớp nhiều thư mục đề).
+> - **Chấm AI (ChatGPT) cho writing**: đưa vào nhóm AI / backlog có điều kiện (cần chốt chi phí + OpenAI API).
+
 ## Giả định
 
 - **2 người**, mỗi người **~3h/ngày** (~15–18h/tuần) → nhóm **~30h+/tuần**.

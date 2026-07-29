@@ -1,5 +1,12 @@
 # Phân tích Engine Đề thi (từ admin trang tham khảo)
 
+> **⚠️ CẬP NHẬT (2026-07-27, theo sheet chốt — xem `DAC-TA-CHUC-NANG.md`):**
+> - **Nghe (Listening) vào CỐT LÕI**, không còn backlog: cô up đề + file audio + đáp án sẵn → máy tự chấm.
+> - **Chấm AI writing MỞ LẠI**: cô muốn tích hợp ChatGPT (AI chấm điểm + nhận xét theo tiêu chí). Trước đây chốt cô chấm tay.
+> - **Writing**: 1 đề + gợi ý, đoạn ≤ 150 từ, cần đếm từ.
+> - **Thang điểm chốt**: thang 10, chia đều điểm cho số câu (`scoring_method = scale_10_even`).
+> Các phần "để sau" bên dưới cần đọc kèm các thay đổi này.
+
 Khảo sát trực tiếp khu admin `admin.anhngumrsuyen.uup.vn` (Kho đề + Bài làm).
 Mục tiêu: hiểu cách họ thiết kế đề thi & bài thi để **làm lại phần cốt lõi**, không clone hết.
 
