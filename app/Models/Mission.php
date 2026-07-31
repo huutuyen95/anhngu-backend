@@ -14,9 +14,15 @@ class Mission extends Model
     protected $fillable = [
         'user_id',
         'assigned_by',
+        'classroom_id',
+        'class_session_id',
+        'missionable_type',
+        'missionable_id',
         'source',
         'status',
         'due_date',
+        'attempts_allowed',
+        'scheduled_at',
         'completed_at',
     ];
 
@@ -24,8 +30,19 @@ class Mission extends Model
     {
         return [
             'due_date' => 'date',
+            'scheduled_at' => 'datetime',
             'completed_at' => 'datetime',
         ];
+    }
+
+    public function classroom(): BelongsTo
+    {
+        return $this->belongsTo(Classroom::class);
+    }
+
+    public function classSession(): BelongsTo
+    {
+        return $this->belongsTo(ClassSession::class);
     }
 
     public function user(): BelongsTo

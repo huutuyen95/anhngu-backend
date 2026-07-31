@@ -19,13 +19,35 @@ class Classroom extends Model
         'cover_url',
         'description',
         'is_active',
+        'starts_on',
+        'ends_on',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'starts_on' => 'date',
+            'ends_on' => 'date',
         ];
+    }
+
+    /**
+     * Trạng thái suy ra từ ngày bắt đầu / kết thúc.
+     * upcoming = chưa tới ngày bắt đầu; ended = đã qua ngày kết thúc; active = còn lại.
+     */
+    public function status(): string
+    {
+        $today = now()->startOfDay();
+
+        if ($this->starts_on && $this->starts_on->gt($today)) {
+            return 'upcoming';
+        }
+        if ($this->ends_on && $this->ends_on->lt($today)) {
+            return 'ended';
+        }
+
+        return 'active';
     }
 
     public function teacher(): BelongsTo
@@ -35,7 +57,7 @@ class Classroom extends Model
 
     public function sessions(): HasMany
     {
-        return $this->hasMany(ClassSession::class);
+        return $this->hasMany(ClassSession::class)->orderBy('order');
     }
 
     public function students(): BelongsToMany

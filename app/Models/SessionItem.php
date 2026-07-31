@@ -14,6 +14,8 @@ class SessionItem extends Model
     protected $fillable = [
         'class_session_id',
         'order',
+        'itemable_type',
+        'itemable_id',
     ];
 
     public function classSession(): BelongsTo
