@@ -11,21 +11,22 @@ class DeckTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_authenticated_user_can_list_public_decks(): void
+    public function test_student_lists_published_shared_decks_via_library(): void
     {
         $user = User::factory()->create();
-        Deck::create(['name' => 'Phương tiện', 'slug' => 'phuong-tien', 'is_public' => true]);
-        Deck::create(['name' => 'Riêng tư', 'slug' => 'rieng-tu', 'is_public' => false]);
+        // Bộ dùng chung, đã publish → học sinh thấy.
+        Deck::create(['name' => 'Phương tiện', 'slug' => 'phuong-tien', 'is_public' => true, 'is_published' => true]);
+        // Chưa publish → không thấy.
+        Deck::create(['name' => 'Riêng tư', 'slug' => 'rieng-tu', 'is_public' => true, 'is_published' => false]);
 
-        $response = $this->actingAs($user)->getJson('/api/v1/decks');
-
-        $response->assertOk()->assertJsonCount(1);
+        $this->actingAs($user)
+            ->getJson('/api/v1/library/decks')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
     }
 
-    public function test_guest_cannot_list_decks(): void
+    public function test_guest_cannot_list_library_decks(): void
     {
-        $response = $this->getJson('/api/v1/decks');
-
-        $response->assertStatus(401);
+        $this->getJson('/api/v1/library/decks')->assertStatus(401);
     }
 }
