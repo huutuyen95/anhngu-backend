@@ -15,7 +15,18 @@ class ClassSession extends Model
         'classroom_id',
         'order',
         'title',
+        'note',
+        'held_on',
+        'is_visible',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'held_on' => 'date',
+            'is_visible' => 'boolean',
+        ];
+    }
 
     public function classroom(): BelongsTo
     {

@@ -1,8 +1,17 @@
 <?php
 
+use App\Http\Controllers\Api\AssignmentController;
+use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ClassroomController;
+use App\Http\Controllers\Api\ClassSessionController;
+use App\Http\Controllers\Api\ClassStudentController;
+use App\Http\Controllers\Api\ContentController;
+use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeckController;
+use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\SessionItemController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\TestAttemptController;
 use App\Http\Controllers\Api\TestController;
@@ -30,7 +39,44 @@ Route::prefix('v1')->group(function () {
         Route::get('attempts/{attempt}/result', [TestAttemptController::class, 'result']);
 
         Route::middleware('role:teacher,admin')->group(function () {
-            Route::get('classrooms', [ClassroomController::class, 'index']);
+            Route::get('dashboard', [DashboardController::class, 'index']);
+
+            Route::get('media/class-covers', [MediaController::class, 'classCovers']);
+            Route::post('media/upload', [MediaController::class, 'upload']);
+
+            Route::get('classrooms/{classroom}/overview', [ClassroomController::class, 'overview']);
+            Route::get('classrooms/{classroom}/sessions', [ClassSessionController::class, 'index']);
+            Route::put('classrooms/{classroom}/sessions/sync', [ClassSessionController::class, 'sync']);
+            Route::post('classrooms/{classroom}/sessions', [ClassSessionController::class, 'store']);
+            Route::post('classrooms/{classroom}/remind', [AssignmentController::class, 'remind']);
+
+            // Báo cáo lớp
+            Route::get('classrooms/{classroom}/report/export', [ReportController::class, 'export']);
+            Route::get('classrooms/{classroom}/report', [ReportController::class, 'show']);
+
+            // Học viên trong lớp
+            Route::get('classrooms/{classroom}/students', [ClassStudentController::class, 'index']);
+            Route::post('classrooms/{classroom}/students/quick', [ClassStudentController::class, 'quick']);
+            Route::post('classrooms/{classroom}/students', [ClassStudentController::class, 'store']);
+            Route::delete('classrooms/{classroom}/students/{userId}', [ClassStudentController::class, 'destroy']);
+
+            Route::apiResource('classrooms', ClassroomController::class);
+
+            // Điểm danh theo buổi
+            Route::get('sessions/{session}/attendances/export', [AttendanceController::class, 'export']);
+            Route::get('sessions/{session}/attendances', [AttendanceController::class, 'index']);
+            Route::put('sessions/{session}/attendances/bulk', [AttendanceController::class, 'bulk']);
+
+            Route::patch('sessions/reorder', [ClassSessionController::class, 'reorder']);
+            Route::put('sessions/{session}', [ClassSessionController::class, 'update']);
+            Route::delete('sessions/{session}', [ClassSessionController::class, 'destroy']);
+
+            Route::get('session-items', [SessionItemController::class, 'index']);
+            Route::delete('session-items/{sessionItem}', [SessionItemController::class, 'destroy']);
+
+            Route::get('assignable-content', [ContentController::class, 'index']);
+            Route::post('assignments', [AssignmentController::class, 'store']);
+
             Route::get('students/import-template', [StudentController::class, 'importTemplate']);
             Route::post('students/import', [StudentController::class, 'import']);
             Route::post('students/bulk', [StudentController::class, 'bulk']);
