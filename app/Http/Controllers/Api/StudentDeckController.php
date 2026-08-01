@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CardResource;
-use App\Http\Resources\DeckResource;
 use App\Models\ActivityLog;
 use App\Models\Card;
 use App\Models\CardProgress;
@@ -29,7 +28,10 @@ class StudentDeckController extends Controller
             })
             ->withCount([
                 'cards',
-                'cards as learned_count' => fn ($q) => $q->whereHas('progress', fn ($p) => $p->where('user_id', $user->id)->whereIn('status', ['learning', 'known'])),
+                'cards as learned_count' => fn ($q) => $q->whereHas(
+                    'progress',
+                    fn ($p) => $p->where('user_id', $user->id)->whereIn('status', ['learning', 'known']),
+                ),
             ])
             ->orderBy('name')
             ->get();
@@ -47,14 +49,13 @@ class StudentDeckController extends Controller
     /** Dữ liệu học 1 bộ: thẻ + tiến độ của chính HS + cấu hình TTS. */
     public function study(Request $request, Deck $deck): JsonResponse
     {
+        $cards = $deck->cards;
         $progress = CardProgress::where('user_id', $request->user()->id)
-            ->whereIn('card_id', $deck->cards()->pluck('id'))
+            ->whereIn('card_id', $cards->pluck('id'))
             ->pluck('status', 'card_id');
 
-        $cards = $deck->cards->map(function (Card $c) use ($progress) {
+        $cards->each(function (Card $c) use ($progress) {
             $c->progress_status = $progress[$c->id] ?? 'new';
-
-            return $c;
         });
 
         return response()->json([
@@ -96,9 +97,10 @@ class StudentDeckController extends Controller
             'created_at' => now(),
         ]);
 
-        $total = $deck->cards()->count();
+        $cardIds = $deck->cards()->pluck('id');
+        $total = $cardIds->count();
         $known = CardProgress::where('user_id', $user->id)
-            ->whereIn('card_id', $deck->cards()->pluck('id'))
+            ->whereIn('card_id', $cardIds)
             ->where('status', 'known')
             ->count();
 

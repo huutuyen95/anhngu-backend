@@ -8,6 +8,11 @@ use App\Http\Controllers\Api\ClassSessionController;
 use App\Http\Controllers\Api\ClassStudentController;
 use App\Http\Controllers\Api\CardController;
 use App\Http\Controllers\Api\ContentController;
+use App\Http\Controllers\Api\DictionaryController;
+use App\Http\Controllers\Api\DocumentAttachmentController;
+use App\Http\Controllers\Api\DocumentCategoryController;
+use App\Http\Controllers\Api\DocumentController;
+use App\Http\Controllers\Api\StudentDocumentController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeckController;
@@ -29,6 +34,13 @@ Route::prefix('v1')->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
         Route::post('auth/logout', [AuthController::class, 'logout']);
 
+        // Tài liệu & Bài giảng — khu học sinh
+        Route::get('library/documents', [StudentDocumentController::class, 'library']);
+        Route::get('documents/{document}/read', [StudentDocumentController::class, 'read']);
+        Route::post('documents/{document}/view', [StudentDocumentController::class, 'view']);
+        Route::get('dictionary', [DictionaryController::class, 'lookup']);
+        Route::post('me/vocab', [DictionaryController::class, 'saveVocab']);
+
         // Từ vựng — khu học sinh
         Route::get('library/decks', [StudentDeckController::class, 'library']);
         Route::get('decks/{deck}/study', [StudentDeckController::class, 'study']);
@@ -47,6 +59,19 @@ Route::prefix('v1')->group(function () {
 
             Route::get('media/class-covers', [MediaController::class, 'classCovers']);
             Route::post('media/upload', [MediaController::class, 'upload']);
+            Route::post('media/embed-preview', [MediaController::class, 'embedPreview']);
+
+            // Tài liệu & Bài giảng — khu admin
+            Route::get('document-categories', [DocumentCategoryController::class, 'index']);
+            Route::put('document-categories/sync', [DocumentCategoryController::class, 'sync']);
+            Route::get('storage/usage', [DocumentController::class, 'storageUsage']);
+            Route::delete('attachments/bulk', [DocumentAttachmentController::class, 'bulkDelete']);
+            Route::delete('attachments/{attachment}', [DocumentAttachmentController::class, 'destroy']);
+            Route::post('documents/{document}/attachments', [DocumentAttachmentController::class, 'store']);
+            Route::put('documents/{document}/attachments/reorder', [DocumentAttachmentController::class, 'reorder']);
+            Route::post('documents/{document}/thumbnail', [DocumentAttachmentController::class, 'thumbnail']);
+            Route::patch('documents/{document}/publish', [DocumentController::class, 'publish']);
+            Route::apiResource('documents', DocumentController::class);
 
             // Từ vựng — khu admin (route tĩnh đặt trước {deck})
             Route::get('decks/cards-import-template', [CardController::class, 'importTemplate']);

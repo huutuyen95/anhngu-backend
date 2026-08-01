@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Card;
 use App\Models\Deck;
 use App\Models\SessionItem;
 use App\Models\User;
@@ -20,7 +21,6 @@ class DeckService
         return DB::transaction(function () use ($data, $teacher, $classroomIds) {
             $deck = Deck::create([
                 'owner_id' => $teacher->id,
-                'classroom_id' => $classroomIds[0] ?? null,
                 'name' => $data['name'],
                 'slug' => $this->uniqueSlug($data['name']),
                 'description' => $data['description'] ?? null,
@@ -53,9 +53,7 @@ class DeckService
             $deck->save();
 
             if (array_key_exists('classroom_ids', $data)) {
-                $ids = $data['classroom_ids'] ?? [];
-                $deck->classrooms()->sync($ids);
-                $deck->update(['classroom_id' => $ids[0] ?? null]);
+                $deck->classrooms()->sync($data['classroom_ids'] ?? []);
             }
         });
 
@@ -68,7 +66,6 @@ class DeckService
         return DB::transaction(function () use ($deck) {
             $copy = Deck::create([
                 'owner_id' => $deck->owner_id,
-                'classroom_id' => $deck->classroom_id,
                 'name' => $deck->name.' (bản sao)',
                 'slug' => $this->uniqueSlug($deck->name),
                 'description' => $deck->description,
@@ -80,10 +77,22 @@ class DeckService
             ]);
             $copy->classrooms()->sync($deck->classrooms()->pluck('classrooms.id'));
 
-            foreach ($deck->cards as $card) {
-                $copy->cards()->create($card->only([
-                    'order', 'term', 'meaning', 'pos', 'ipa', 'audio_url', 'image_url', 'example',
-                ]));
+            $now = now();
+            $rows = $deck->cards->map(fn (Card $card) => [
+                'deck_id' => $copy->id,
+                'order' => $card->order,
+                'term' => $card->term,
+                'meaning' => $card->meaning,
+                'pos' => $card->pos,
+                'ipa' => $card->ipa,
+                'audio_url' => $card->audio_url,
+                'image_url' => $card->image_url,
+                'example' => $card->example,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all();
+            if ($rows !== []) {
+                Card::insert($rows);
             }
 
             return $copy;

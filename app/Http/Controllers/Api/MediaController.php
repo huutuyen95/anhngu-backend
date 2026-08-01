@@ -31,4 +31,32 @@ class MediaController extends Controller
 
         return response()->json(['url' => asset('storage/'.$path)]);
     }
+
+    /** Nhận diện link YouTube → trả video_id + thumbnail (nhúng không tốn dung lượng). */
+    public function embedPreview(Request $request): JsonResponse
+    {
+        $data = $request->validate(['url' => ['required', 'string', 'max:2048']]);
+        $id = $this->youtubeId($data['url']);
+
+        if (! $id) {
+            return response()->json(['recognized' => false, 'message' => 'Không nhận diện được link YouTube.'], 422);
+        }
+
+        return response()->json([
+            'recognized' => true,
+            'provider' => 'youtube',
+            'video_id' => $id,
+            'embed_url' => "https://www.youtube-nocookie.com/embed/{$id}",
+            'thumbnail' => "https://img.youtube.com/vi/{$id}/hqdefault.jpg",
+        ]);
+    }
+
+    private function youtubeId(string $url): ?string
+    {
+        if (preg_match('#(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)([\w-]{11})#i', $url, $m)) {
+            return $m[1];
+        }
+
+        return null;
+    }
 }

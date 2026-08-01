@@ -87,6 +87,7 @@ class DatabaseSeeder extends Seeder
         $this->seedSampleTest($teacher);
 
         $this->call(IpaDictionarySeeder::class);
+        $this->call(DocumentCategoriesSeeder::class);
     }
 
     /**

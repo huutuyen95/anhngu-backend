@@ -13,9 +13,45 @@ class IpaDictionarySeeder extends Seeder
 {
     public function run(): void
     {
+        $meanings = $this->meanings();
         foreach ($this->words() as [$word, $ipa, $pos]) {
-            IpaEntry::updateOrCreate(['word' => strtolower($word)], ['ipa' => $ipa, 'pos' => $pos]);
+            $key = strtolower($word);
+            IpaEntry::updateOrCreate(['word' => $key], [
+                'ipa' => $ipa, 'pos' => $pos, 'meaning_vi' => $meanings[$key] ?? null,
+            ]);
         }
+    }
+
+    /**
+     * Nghĩa tiếng Việt cho từ điển tra cứu (FE 11).
+     *
+     * @return array<string, string>
+     */
+    private function meanings(): array
+    {
+        return [
+            'apple' => 'quả táo', 'banana' => 'quả chuối', 'orange' => 'quả cam', 'water' => 'nước',
+            'school' => 'trường học', 'teacher' => 'giáo viên', 'student' => 'học sinh', 'book' => 'quyển sách',
+            'pencil' => 'bút chì', 'friend' => 'bạn bè', 'family' => 'gia đình', 'house' => 'ngôi nhà',
+            'city' => 'thành phố', 'country' => 'đất nước', 'journey' => 'chuyến đi', 'souvenir' => 'quà lưu niệm',
+            'weather' => 'thời tiết', 'holiday' => 'kỳ nghỉ', 'festival' => 'lễ hội', 'museum' => 'bảo tàng',
+            'hospital' => 'bệnh viện', 'library' => 'thư viện', 'garden' => 'khu vườn', 'kitchen' => 'nhà bếp',
+            'bridge' => 'cây cầu', 'mountain' => 'ngọn núi', 'river' => 'dòng sông', 'island' => 'hòn đảo',
+            'beach' => 'bãi biển', 'forest' => 'khu rừng', 'animal' => 'động vật', 'elephant' => 'con voi',
+            'dolphin' => 'cá heo', 'beautiful' => 'đẹp', 'happy' => 'vui vẻ', 'difficult' => 'khó',
+            'important' => 'quan trọng', 'delicious' => 'ngon', 'famous' => 'nổi tiếng', 'expensive' => 'đắt',
+            'comfortable' => 'thoải mái', 'modern' => 'hiện đại', 'traditional' => 'truyền thống',
+            'friendly' => 'thân thiện', 'careful' => 'cẩn thận', 'travel' => 'du lịch', 'discover' => 'khám phá',
+            'imagine' => 'tưởng tượng', 'remember' => 'ghi nhớ', 'celebrate' => 'ăn mừng', 'practise' => 'luyện tập',
+            'develop' => 'phát triển', 'protect' => 'bảo vệ', 'improve' => 'cải thiện', 'communicate' => 'giao tiếp',
+            'describe' => 'miêu tả', 'explain' => 'giải thích', 'listen' => 'lắng nghe', 'answer' => 'trả lời',
+            'question' => 'câu hỏi', 'quickly' => 'một cách nhanh chóng', 'carefully' => 'một cách cẩn thận',
+            'usually' => 'thường thường', 'together' => 'cùng nhau', 'already' => 'đã rồi', 'finally' => 'cuối cùng',
+            'information' => 'thông tin', 'environment' => 'môi trường', 'technology' => 'công nghệ',
+            'adventure' => 'cuộc phiêu lưu', 'knowledge' => 'kiến thức', 'weekend' => 'cuối tuần',
+            // Dạng gốc cho lemmatize.
+            'go' => 'đi', 'child' => 'đứa trẻ', 'good' => 'tốt', 'run' => 'chạy', 'make' => 'làm, chế tạo',
+        ];
     }
 
     /**
@@ -48,6 +84,8 @@ class IpaDictionarySeeder extends Seeder
             ['together', '/təˈɡeð.ər/', 'adv.'], ['already', '/ɔːlˈred.i/', 'adv.'], ['finally', '/ˈfaɪ.nəl.i/', 'adv.'],
             ['information', '/ˌɪn.fəˈmeɪ.ʃən/', 'n.'], ['environment', '/ɪnˈvaɪ.rən.mənt/', 'n.'], ['technology', '/tekˈnɒl.ə.dʒi/', 'n.'],
             ['adventure', '/ədˈven.tʃər/', 'n.'], ['knowledge', '/ˈnɒl.ɪdʒ/', 'n.'], ['weekend', '/ˌwiːkˈend/', 'n.'],
+            ['go', '/ɡəʊ/', 'v.'], ['child', '/tʃaɪld/', 'n.'], ['good', '/ɡʊd/', 'adj.'],
+            ['run', '/rʌn/', 'v.'], ['make', '/meɪk/', 'v.'],
         ];
     }
 }

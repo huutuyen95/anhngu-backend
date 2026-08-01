@@ -31,11 +31,21 @@ class CardService
      */
     public function reorder(Deck $deck, array $orderedIds): void
     {
-        DB::transaction(function () use ($deck, $orderedIds) {
-            foreach ($orderedIds as $index => $id) {
-                Card::where('deck_id', $deck->id)->where('id', $id)->update(['order' => $index + 1]);
-            }
-        });
+        if ($orderedIds === []) {
+            return;
+        }
+
+        $cases = [];
+        $ids = [];
+        foreach ($orderedIds as $index => $id) {
+            $id = (int) $id;
+            $cases[] = "WHEN {$id} THEN ".($index + 1);
+            $ids[] = $id;
+        }
+
+        Card::where('deck_id', $deck->id)
+            ->whereIn('id', $ids)
+            ->update(['order' => DB::raw('CASE id '.implode(' ', $cases).' END')]);
     }
 
     /**
@@ -46,7 +56,9 @@ class CardService
      */
     public function previewImport(Deck $deck, array $rows): array
     {
-        $existing = $deck->cards()->pluck('term')->map(fn ($t) => strtolower($t))->all();
+        $existing = array_flip(
+            $deck->cards()->pluck('term')->map(fn ($t) => strtolower($t))->all()
+        );
         $dict = $this->lookupIpa(array_map(fn ($r) => (string) ($r['term'] ?? ''), $rows));
 
         $result = [];
@@ -70,7 +82,7 @@ class CardService
             $key = strtolower($term);
             if ($reasons) {
                 $status = 'error';
-            } elseif (in_array($key, $existing, true) || in_array($key, $seen, true)) {
+            } elseif (isset($existing[$key]) || isset($seen[$key])) {
                 $status = 'duplicate';
                 $reasons[] = 'Từ đã có trong bộ';
             } elseif ($ipa === '' && isset($dict[$key])) {
@@ -78,7 +90,7 @@ class CardService
                 $reasons[] = 'Sẽ tự điền phiên âm khi import';
             }
 
-            $seen[] = $key;
+            $seen[$key] = true;
             $summary[$status]++;
             $result[] = [
                 'row' => $i + 1,
@@ -103,10 +115,9 @@ class CardService
     public function commitImport(Deck $deck, array $rows, bool $autoIpa, bool $overwrite): array
     {
         $preview = $this->previewImport($deck, $rows);
-        $dict = $this->lookupIpa(array_map(fn ($r) => (string) ($r['term'] ?? ''), $rows));
         $counts = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'error' => 0];
 
-        DB::transaction(function () use ($deck, $preview, $rows, $autoIpa, $overwrite, $dict, &$counts) {
+        DB::transaction(function () use ($deck, $preview, $rows, $autoIpa, $overwrite, &$counts) {
             $order = (int) ($deck->cards()->max('order') ?? 0);
 
             foreach ($preview['rows'] as $idx => $line) {
@@ -115,11 +126,12 @@ class CardService
 
                     continue;
                 }
-                $key = strtolower($line['term']);
-                $ipa = $line['ipa'];
-                if (! $ipa && $autoIpa && isset($dict[$key])) {
-                    $ipa = $dict[$key]['ipa'];
-                }
+
+                // IPA/POS trong preview có thể đã gắn gợi ý từ điển — chỉ dùng khi autoIpa.
+                $rawIpa = trim((string) ($rows[$idx]['ipa'] ?? ''));
+                $rawPos = trim((string) ($rows[$idx]['pos'] ?? ''));
+                $ipa = $rawIpa !== '' ? $rawIpa : ($autoIpa ? $line['ipa'] : null);
+                $pos = $rawPos !== '' ? $rawPos : ($autoIpa ? $line['pos'] : null);
 
                 if ($line['status'] === 'duplicate') {
                     if (! $overwrite) {
@@ -130,7 +142,7 @@ class CardService
                     $deck->cards()->where('term', $line['term'])->update([
                         'meaning' => $line['meaning'],
                         'ipa' => $ipa,
-                        'pos' => $line['pos'],
+                        'pos' => $pos,
                         'example' => $rows[$idx]['example'] ?? null,
                     ]);
                     $counts['updated']++;
@@ -143,7 +155,7 @@ class CardService
                     'term' => $line['term'],
                     'meaning' => $line['meaning'],
                     'ipa' => $ipa,
-                    'pos' => $line['pos'],
+                    'pos' => $pos,
                     'example' => $rows[$idx]['example'] ?? null,
                 ]);
                 $counts['created']++;

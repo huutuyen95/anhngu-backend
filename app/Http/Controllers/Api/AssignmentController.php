@@ -19,7 +19,7 @@ class AssignmentController extends Controller
             'classroom_id' => ['required', 'integer', 'exists:classrooms,id'],
             'class_session_id' => ['required', 'integer', 'exists:class_sessions,id'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.type' => ['required', 'string', Rule::in(['test', 'writing', 'deck'])],
+            'items.*.type' => ['required', 'string', Rule::in(['test', 'writing', 'deck', 'document', 'lecture'])],
             'items.*.id' => ['required', 'integer'],
             'student_ids' => ['nullable', 'array'],
             'student_ids.*' => ['integer'],

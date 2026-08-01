@@ -10,5 +10,5 @@ class IpaEntry extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['word', 'ipa', 'pos'];
+    protected $fillable = ['word', 'ipa', 'pos', 'meaning_vi'];
 }

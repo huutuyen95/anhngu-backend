@@ -17,11 +17,9 @@ class DeckController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $audioReady = fn ($q) => $q->where(fn ($w) => $w->whereNotNull('audio_url')->orWhereNotNull('ipa'));
-
         $page = Deck::query()
             ->with(['owner:id,name', 'classrooms:id,name'])
-            ->withCount(['cards', 'cards as audio_ready_count' => $audioReady])
+            ->withCount(['cards', 'cards as audio_ready_count' => $this->audioReadyCount()])
             ->when($request->input('q'), fn ($q, $t) => $q->where('name', 'like', "%{$t}%"))
             ->when($request->input('classroom_id'), fn ($q, $id) => $q->whereHas('classrooms', fn ($c) => $c->where('classrooms.id', $id)))
             ->when($request->has('is_published') && $request->input('is_published') !== '', fn ($q) => $q->where('is_published', $request->boolean('is_published')))
@@ -45,7 +43,7 @@ class DeckController extends Controller
     public function show(Deck $deck): JsonResponse
     {
         $deck->load(['owner:id,name', 'classrooms:id,name'])
-            ->loadCount(['cards', 'cards as audio_ready_count' => fn ($q) => $q->where(fn ($w) => $w->whereNotNull('audio_url')->orWhereNotNull('ipa'))]);
+            ->loadCount(['cards', 'cards as audio_ready_count' => $this->audioReadyCount()]);
 
         return response()->json(['deck' => new DeckResource($deck)]);
     }
@@ -117,5 +115,11 @@ class DeckController extends Controller
             'tts_repeat' => ['sometimes', Rule::in(['1', '2', 'auto'])],
             'is_published' => ['sometimes', 'boolean'],
         ]);
+    }
+
+    /** Thẻ có mp3 hoặc IPA (đủ để TTS). */
+    private function audioReadyCount(): \Closure
+    {
+        return fn ($q) => $q->where(fn ($w) => $w->whereNotNull('audio_url')->orWhereNotNull('ipa'));
     }
 }
