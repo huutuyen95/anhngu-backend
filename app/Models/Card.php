@@ -16,6 +16,7 @@ class Card extends Model
         'order',
         'term',
         'meaning',
+        'pos',
         'ipa',
         'audio_url',
         'image_url',

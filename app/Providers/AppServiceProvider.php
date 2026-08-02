@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Deck;
+use App\Models\Document;
 use App\Models\Test;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -30,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
         Relation::morphMap([
             'test' => Test::class,
             'deck' => Deck::class,
+            'document' => Document::class,
         ]);
     }
 }

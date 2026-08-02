@@ -21,6 +21,7 @@ class UpdateStudentRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:20'],
             'note' => ['nullable', 'string'],
+            'avatar_url' => ['nullable', 'string', 'max:2048'],
             'classroom_ids' => ['sometimes', 'array'],
             'classroom_ids.*' => ['integer', 'exists:classrooms,id'],
         ];

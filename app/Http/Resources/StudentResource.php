@@ -19,6 +19,7 @@ class StudentResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
+            'avatar_url' => $this->avatar_url,
             'phone' => $this->phone,
             'note' => $this->note,
             'is_active' => (bool) $this->is_active,
