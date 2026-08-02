@@ -85,6 +85,9 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->seedSampleTest($teacher);
+        $this->seedSampleWritingTest($teacher);
+        $this->seedSampleListeningTest($teacher);
+        $this->seedSampleSpeakingTest($teacher);
     }
 
     /**
@@ -199,5 +202,156 @@ class DatabaseSeeder extends Seeder
 
             $question->options()->createMany($questionData['options']);
         }
+    }
+
+    /**
+     * Đề mẫu Writing: 1 Part → 1 Section → 1 câu writing, để test luồng nộp bài → chờ chấm → chấm tay.
+     */
+    private function seedSampleWritingTest(User $teacher): void
+    {
+        $test = Test::create([
+            'created_by' => $teacher->id,
+            'title' => 'Writing: My Hometown',
+            'slug' => 'writing-my-hometown',
+            'skill' => Skill::Writing,
+            'duration_minutes' => 30,
+            'total_score' => 10,
+            'word_limit' => 150,
+            'rubric' => "Tiêu chí chấm:\n- Task achievement (trả lời đúng đề bài): 3đ\n- Coherence & cohesion (bố cục, liên kết câu): 3đ\n- Vocabulary & grammar (từ vựng, ngữ pháp): 4đ",
+            'is_published' => true,
+        ]);
+
+        $part = $test->parts()->create([
+            'order' => 1,
+            'title' => 'Part 1',
+            'display_mode' => 'default',
+        ]);
+
+        $section = $part->sections()->create([
+            'order' => 1,
+            'instruction' => 'Viết bài luận theo yêu cầu bên dưới.',
+        ]);
+
+        $section->questions()->create([
+            'order' => 1,
+            'type' => QuestionType::Writing,
+            'content' => 'Describe your hometown. You should write about its location, what it looks like, '
+                .'and why you like or dislike living there. Write at least 150 words.',
+            'score' => 10,
+        ]);
+    }
+
+    /**
+     * Đề mẫu Listening: 1 Part → 1 Section có audio_url + max_plays=2, vài câu MCQ trả lời theo audio
+     * (máy tự chấm như đề Reading, không cần grading mới).
+     */
+    private function seedSampleListeningTest(User $teacher): void
+    {
+        $test = Test::create([
+            'created_by' => $teacher->id,
+            'title' => 'Listening: Booking a Hotel Room',
+            'slug' => 'listening-booking-a-hotel-room',
+            'skill' => Skill::Listening,
+            'duration_minutes' => 20,
+            'total_score' => 10,
+            'is_published' => true,
+        ]);
+
+        $part = $test->parts()->create([
+            'order' => 1,
+            'title' => 'Part 1',
+            'display_mode' => 'default',
+        ]);
+
+        $section = $part->sections()->create([
+            'order' => 1,
+            'instruction' => 'Nghe đoạn hội thoại và chọn đáp án đúng. Bạn chỉ được nghe tối đa 2 lần.',
+            'audio_url' => '/storage/audio/sample-listening.mp3',
+            'max_plays' => 2,
+        ]);
+
+        $questions = [
+            [
+                'content' => 'What type of room does the man want to book?',
+                'explanation' => "Người khách nói muốn đặt phòng đôi ('a double room').",
+                'options' => [
+                    ['label' => 'A', 'content' => 'A single room', 'is_correct' => false],
+                    ['label' => 'B', 'content' => 'A double room', 'is_correct' => true],
+                    ['label' => 'C', 'content' => 'A suite', 'is_correct' => false],
+                ],
+            ],
+            [
+                'content' => 'How many nights will he stay?',
+                'explanation' => "Người khách nói sẽ ở lại 'three nights'.",
+                'options' => [
+                    ['label' => 'A', 'content' => 'Two nights', 'is_correct' => false],
+                    ['label' => 'B', 'content' => 'Three nights', 'is_correct' => true],
+                    ['label' => 'C', 'content' => 'Four nights', 'is_correct' => false],
+                ],
+            ],
+        ];
+
+        foreach ($questions as $order => $questionData) {
+            $question = $section->questions()->create([
+                'order' => $order + 1,
+                'type' => QuestionType::MultipleChoice,
+                'content' => $questionData['content'],
+                'explanation' => $questionData['explanation'],
+                'score' => 5,
+            ]);
+
+            $question->options()->createMany($questionData['options']);
+        }
+    }
+
+    /**
+     * Đề mẫu Speaking: 1 Part → 1 Section → 2 câu speaking (có ảnh gợi ý + giới hạn thời lượng ghi
+     * âm), để test luồng thu âm → nộp → chờ chấm → cô chấm tay.
+     */
+    private function seedSampleSpeakingTest(User $teacher): void
+    {
+        $test = Test::create([
+            'created_by' => $teacher->id,
+            'title' => 'Speaking: Describe a Picture',
+            'slug' => 'speaking-describe-a-picture',
+            'skill' => Skill::Speaking,
+            'duration_minutes' => 15,
+            'total_score' => 10,
+            'is_published' => true,
+        ]);
+
+        $part = $test->parts()->create([
+            'order' => 1,
+            'title' => 'Part 1',
+            'display_mode' => 'default',
+        ]);
+
+        $section = $part->sections()->create([
+            'order' => 1,
+            'instruction' => 'Nhìn tranh và trả lời câu hỏi bằng cách ghi âm.',
+        ]);
+
+        $section->questions()->create([
+            'order' => 1,
+            'type' => QuestionType::Speaking,
+            'content' => 'Describe what you see in these pictures.',
+            'images' => [
+                'https://picsum.photos/seed/speaking-1a/600/400',
+                'https://picsum.photos/seed/speaking-1b/600/400',
+            ],
+            'record_limit_seconds' => 60,
+            'score' => 5,
+        ]);
+
+        $section->questions()->create([
+            'order' => 2,
+            'type' => QuestionType::Speaking,
+            'content' => 'Do you think this activity is popular in your country? Why or why not?',
+            'images' => [
+                'https://picsum.photos/seed/speaking-2/600/400',
+            ],
+            'record_limit_seconds' => 90,
+            'score' => 5,
+        ]);
     }
 }

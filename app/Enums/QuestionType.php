@@ -8,4 +8,6 @@ enum QuestionType: string
     case FillBlank = 'fill_blank';
     case Select = 'select';
     case Upload = 'upload';
+    case Writing = 'writing';
+    case Speaking = 'speaking';
 }

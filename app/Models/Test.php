@@ -22,6 +22,8 @@ class Test extends Model
         'duration_minutes',
         'total_score',
         'scoring_method',
+        'word_limit',
+        'rubric',
         'ai_grading',
         'is_published',
     ];

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\Skill;
 use App\Http\Controllers\Controller;
 use App\Models\Deck;
+use App\Models\Question;
 use App\Models\Test;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,16 +27,25 @@ class ContentController extends Controller
                 ->when($type === 'writing', fn ($query) => $query->where('skill', Skill::Writing))
                 ->when($type === 'test', fn ($query) => $query->where('skill', '!=', Skill::Writing))
                 ->when($q, fn ($query, $term) => $query->where('title', 'like', "%{$term}%"))
-                ->withCount('questions')
                 ->take(50)
-                ->get()
-                ->map(fn (Test $t) => [
-                    'type' => $type,
-                    'id' => $t->id,
-                    'title' => $t->title,
-                    'meta' => ($t->questions_count ?? 0).' câu · '.($t->duration_minutes ?? 0).' phút',
-                ]);
-            $items = $items->concat($tests);
+                ->get();
+
+            // Test không có quan hệ trực tiếp tới Question (phải qua parts → sections),
+            // nên đếm câu hỏi bằng join thay vì withCount('questions').
+            $questionCounts = Question::query()
+                ->join('test_sections', 'questions.test_section_id', '=', 'test_sections.id')
+                ->join('test_parts', 'test_sections.test_part_id', '=', 'test_parts.id')
+                ->whereIn('test_parts.test_id', $tests->pluck('id'))
+                ->selectRaw('test_parts.test_id as test_id, count(*) as question_count')
+                ->groupBy('test_parts.test_id')
+                ->pluck('question_count', 'test_id');
+
+            $items = $items->concat($tests->map(fn (Test $t) => [
+                'type' => $type,
+                'id' => $t->id,
+                'title' => $t->title,
+                'meta' => ($questionCounts[$t->id] ?? 0).' câu · '.($t->duration_minutes ?? 0).' phút',
+            ]));
         }
 
         if ($type === 'deck') {
