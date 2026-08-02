@@ -17,6 +17,8 @@ class AssignmentService
         'test' => \App\Models\Test::class,
         'writing' => \App\Models\Test::class, // writing cũng là 1 Test (skill=writing)
         'deck' => \App\Models\Deck::class,
+        'document' => \App\Models\Document::class,
+        'lecture' => \App\Models\Document::class,
     ];
 
     /**

@@ -19,12 +19,14 @@ class CardProgress extends Model
         'next_review_at',
         'ease',
         'review_count',
+        'reviewed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'next_review_at' => 'datetime',
+            'reviewed_at' => 'datetime',
         ];
     }
 

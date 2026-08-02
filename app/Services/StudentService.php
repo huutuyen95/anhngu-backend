@@ -64,6 +64,7 @@ class StudentService
                 'role' => UserRole::Student,
                 'phone' => $data['phone'] ?? null,
                 'note' => $data['note'] ?? null,
+                'avatar_url' => $data['avatar_url'] ?? null,
                 'is_active' => true,
             ]);
 
@@ -84,7 +85,7 @@ class StudentService
     {
         DB::transaction(function () use ($student, $data) {
             $student->fill(array_filter(
-                ['name' => $data['name'] ?? null, 'phone' => $data['phone'] ?? null, 'note' => $data['note'] ?? null],
+                ['name' => $data['name'] ?? null, 'phone' => $data['phone'] ?? null, 'note' => $data['note'] ?? null, 'avatar_url' => $data['avatar_url'] ?? null],
                 fn ($v, $k) => array_key_exists($k, $data),
                 ARRAY_FILTER_USE_BOTH,
             ));

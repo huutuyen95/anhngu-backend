@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\Skill;
 use App\Http\Controllers\Controller;
 use App\Models\Deck;
+use App\Models\Document;
 use App\Models\Test;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,6 +52,20 @@ class ContentController extends Controller
                     'meta' => ($d->cards_count ?? 0).' từ',
                 ]);
             $items = $items->concat($decks);
+        }
+
+        if (in_array($type, ['document', 'lecture'], true)) {
+            $docs = Document::query()
+                ->where('type', $type)
+                ->when($q, fn ($query, $term) => $query->where('title', 'like', "%{$term}%"))
+                ->take(50)->get()
+                ->map(fn (Document $d) => [
+                    'type' => $type,
+                    'id' => $d->id,
+                    'title' => $d->title,
+                    'meta' => ($type === 'lecture' ? 'Bài giảng' : 'Tài liệu').' · '.$d->reading_minutes.' phút đọc',
+                ]);
+            $items = $items->concat($docs);
         }
 
         return response()->json(['data' => $items->values()]);
