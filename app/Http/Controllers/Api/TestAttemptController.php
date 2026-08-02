@@ -5,15 +5,20 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TestDetailResource;
 use App\Models\AttemptAnswer;
+use App\Models\Question;
 use App\Models\Test;
 use App\Models\TestAttempt;
+use App\Services\AttemptAudioService;
 use App\Services\TestGradingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class TestAttemptController extends Controller
 {
-    public function __construct(private readonly TestGradingService $gradingService) {}
+    public function __construct(
+        private readonly TestGradingService $gradingService,
+        private readonly AttemptAudioService $audioService,
+    ) {}
 
     public function start(Request $request, Test $test)
     {
@@ -74,6 +79,28 @@ class TestAttemptController extends Controller
         }
 
         return response()->json(['message' => 'Đã lưu bài làm.']);
+    }
+
+    public function uploadAudio(Request $request, TestAttempt $attempt, Question $question)
+    {
+        abort_if($attempt->user_id !== $request->user()->id, 403);
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:mp3,m4a,wav,ogg,aac,webm', 'max:20480'],
+        ]);
+
+        $answer = $this->audioService->upload($attempt, $question, $request->file('file'));
+
+        return response()->json(['url' => $answer->answer_file_url]);
+    }
+
+    public function deleteAudio(Request $request, TestAttempt $attempt, Question $question)
+    {
+        abort_if($attempt->user_id !== $request->user()->id, 403);
+
+        $this->audioService->delete($attempt, $question);
+
+        return response()->json(['message' => 'Đã xoá bản ghi âm.']);
     }
 
     public function submit(Request $request, TestAttempt $attempt)

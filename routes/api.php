@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\AdminAttemptController;
+use App\Http\Controllers\Api\AdminTestController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -51,6 +53,8 @@ Route::prefix('v1')->group(function () {
         Route::get('tests/{test}', [TestController::class, 'show']);
         Route::post('tests/{test}/attempts', [TestAttemptController::class, 'start']);
         Route::put('attempts/{attempt}/answers', [TestAttemptController::class, 'saveAnswers']);
+        Route::post('attempts/{attempt}/answers/{question}/audio', [TestAttemptController::class, 'uploadAudio']);
+        Route::delete('attempts/{attempt}/answers/{question}/audio', [TestAttemptController::class, 'deleteAudio']);
         Route::post('attempts/{attempt}/submit', [TestAttemptController::class, 'submit']);
         Route::get('attempts/{attempt}/result', [TestAttemptController::class, 'result']);
 
@@ -125,6 +129,15 @@ Route::prefix('v1')->group(function () {
 
             Route::get('assignable-content', [ContentController::class, 'index']);
             Route::post('assignments', [AssignmentController::class, 'store']);
+
+            // Đề thi: CRUD + editor cấu trúc (Part → Section → Question → Option)
+            Route::put('admin/tests/{test}/structure', [AdminTestController::class, 'saveStructure']);
+            Route::apiResource('admin/tests', AdminTestController::class);
+
+            // Chấm bài (chủ yếu writing — cô chấm tay)
+            Route::get('admin/attempts', [AdminAttemptController::class, 'index']);
+            Route::get('admin/attempts/{attempt}', [AdminAttemptController::class, 'show']);
+            Route::post('admin/attempts/{attempt}/grade', [AdminAttemptController::class, 'grade']);
 
             Route::get('students/import-template', [StudentController::class, 'importTemplate']);
             Route::post('students/import', [StudentController::class, 'import']);

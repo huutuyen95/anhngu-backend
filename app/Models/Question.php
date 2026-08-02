@@ -18,6 +18,8 @@ class Question extends Model
         'type',
         'content',
         'audio_url',
+        'images',
+        'record_limit_seconds',
         'explanation',
         'score',
     ];
@@ -27,6 +29,7 @@ class Question extends Model
         return [
             'type' => QuestionType::class,
             'score' => 'decimal:2',
+            'images' => 'array',
         ];
     }
 

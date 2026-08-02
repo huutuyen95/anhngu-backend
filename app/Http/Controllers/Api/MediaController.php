@@ -23,11 +23,17 @@ class MediaController extends Controller
 
     public function upload(Request $request): JsonResponse
     {
+        $type = $request->input('type', 'image');
+
         $request->validate([
-            'file' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'file' => $type === 'audio'
+                ? ['required', 'file', 'mimes:mp3,m4a,wav,ogg,aac', 'max:20480']
+                : ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ]);
 
-        $path = $request->file('file')->store('covers', 'public');
+        $path = $type === 'audio'
+            ? $request->file('file')->store('audio', 'public')
+            : $request->file('file')->store('covers', 'public');
 
         return response()->json(['url' => asset('storage/'.$path)]);
     }

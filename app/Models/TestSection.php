@@ -17,6 +17,7 @@ class TestSection extends Model
         'instruction',
         'passage',
         'audio_url',
+        'max_plays',
     ];
 
     public function part(): BelongsTo

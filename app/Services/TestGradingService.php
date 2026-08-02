@@ -38,13 +38,22 @@ class TestGradingService
                 'created_at' => now(),
             ]);
 
-            $isNewBest = $this->reconcileBestAttempt($attempt, $graded);
+            // Đề có câu writing chưa chấm → chờ giáo viên chấm tay, không dedup/finalize điểm.
+            if ($graded['has_pending_review']) {
+                $this->markPendingReview($attempt, $graded);
+                $isNewBest = false;
+                $status = 'pending_review';
+            } else {
+                $isNewBest = $this->reconcileBestAttempt($attempt, $graded);
+                $status = 'submitted';
+            }
 
             return [
                 'total_score' => $graded['total_score'],
                 'correct_count' => $graded['correct_count'],
                 'question_count' => $graded['question_count'],
                 'is_new_best' => $isNewBest,
+                'status' => $status,
                 'test' => new TestDetailResource($test, revealAnswers: true),
                 'answers' => $graded['answers'],
             ];
@@ -53,7 +62,7 @@ class TestGradingService
 
     /**
      * Duyệt mọi câu hỏi của đề, tự chấm 3 loại (multiple_choice/select/fill_blank),
-     * bỏ qua upload (chờ chấm sau). Ghi is_correct + score vào attempt_answers của $attempt.
+     * bỏ qua upload/writing (chờ chấm sau). Ghi is_correct + score vào attempt_answers của $attempt.
      */
     private function gradeQuestions(TestAttempt $attempt, Test $test): array
     {
@@ -66,13 +75,18 @@ class TestGradingService
         $gradableCount = 0;
         $correctCount = 0;
         $answerRows = [];
+        $hasPendingReview = false;
 
         foreach ($questions as $question) {
             $submitted = $submittedAnswers->get($question->id);
 
-            if ($question->type === QuestionType::Upload) {
+            if (in_array($question->type, [QuestionType::Upload, QuestionType::Writing, QuestionType::Speaking], true)) {
                 // Câu nói/viết: chờ AI hoặc giáo viên chấm sau, không tự chấm ở đây.
                 $isCorrect = null;
+
+                if (in_array($question->type, [QuestionType::Writing, QuestionType::Speaking], true)) {
+                    $hasPendingReview = true;
+                }
             } else {
                 $gradableCount++;
                 $isCorrect = $this->isAnswerCorrect($question, $submitted);
@@ -112,25 +126,46 @@ class TestGradingService
             'correct_count' => $correctCount,
             'question_count' => $questions->count(),
             'answers' => collect($answerRows)->values(),
+            'has_pending_review' => $hasPendingReview,
         ];
     }
 
     /**
-     * Đối chiếu $attempt (lượt vừa chấm) với lượt submitted cao điểm nhất hiện có của
-     * (user, test). Giữ lại đúng 1 dòng test_attempts điểm cao hơn, xoá dòng còn lại
-     * (kèm attempt_answers). Trả về true nếu $attempt trở thành lượt điểm cao nhất.
+     * Đề có câu writing chưa chấm: lưu lại điểm-tạm (chỉ từ câu tự chấm) + status=pending_review,
+     * KHÔNG đối chiếu/xoá so với các lượt khác — chờ giáo viên chấm xong mới finalize
+     * qua reconcileBestAttempt().
      */
-    private function reconcileBestAttempt(TestAttempt $attempt, array $graded): bool
+    private function markPendingReview(TestAttempt $attempt, array $graded): void
     {
-        $previousBest = TestAttempt::where('user_id', $attempt->user_id)
+        $attempt->update([
+            'submitted_at' => now(),
+            'status' => 'pending_review',
+            'total_score' => $graded['total_score'],
+            'correct_count' => $graded['correct_count'],
+            'question_count' => $graded['question_count'],
+            'last_attempted_at' => now(),
+        ]);
+    }
+
+    /**
+     * Đối chiếu $attempt (lượt vừa chấm xong, điểm đã finalize) với lượt `submitted`/`graded`
+     * cao điểm nhất hiện có của (user, test). Giữ lại đúng 1 dòng test_attempts điểm cao hơn,
+     * xoá dòng còn lại (kèm attempt_answers). Trả về true nếu $attempt trở thành lượt điểm cao nhất.
+     *
+     * Public vì AttemptGradingService cũng gọi lại hàm này sau khi giáo viên chấm xong writing
+     * (lúc đó điểm mới được finalize, trước đó bị TestGradingService::submit() bỏ qua bước này).
+     */
+    public function reconcileBestAttempt(TestAttempt $attempt, array $graded, string $finalStatus = 'submitted'): bool
+    {
+        $previousBest = TestAttempt::whereIn('status', ['submitted', 'graded'])
+            ->where('user_id', $attempt->user_id)
             ->where('test_id', $attempt->test_id)
-            ->where('status', 'submitted')
             ->where('id', '!=', $attempt->id)
             ->lockForUpdate()
             ->first();
 
         if (! $previousBest || $graded['total_score'] > (float) $previousBest->total_score) {
-            $attemptCount = $previousBest ? $previousBest->attempt_count + 1 : 1;
+            $attemptCount = $previousBest ? $previousBest->attempt_count + 1 : $attempt->attempt_count;
 
             if ($previousBest) {
                 $previousBest->answers()->delete();
@@ -138,8 +173,8 @@ class TestGradingService
             }
 
             $attempt->update([
-                'submitted_at' => now(),
-                'status' => 'submitted',
+                'submitted_at' => $attempt->submitted_at ?? now(),
+                'status' => $finalStatus,
                 'total_score' => $graded['total_score'],
                 'correct_count' => $graded['correct_count'],
                 'question_count' => $graded['question_count'],
