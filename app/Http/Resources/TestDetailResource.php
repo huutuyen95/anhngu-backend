@@ -34,9 +34,12 @@ class TestDetailResource extends JsonResource
             'total_score' => (float) $this->total_score,
             'word_limit' => $this->word_limit,
             ...($this->forTeacher ? [
+                'category_id' => $this->category_id,
+                'attempts_count' => $this->attempts()->count(),
                 'is_published' => (bool) $this->is_published,
                 'rubric' => $this->rubric,
                 'scoring_method' => $this->scoring_method,
+                'shuffle_questions' => (bool) $this->shuffle_questions,
                 'is_combo' => (bool) $this->is_combo,
                 'thumbnail_url' => $this->thumbnail_url,
             ] : []),

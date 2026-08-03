@@ -20,12 +20,14 @@ class UpdateTestRequest extends FormRequest
     {
         return [
             'title' => ['sometimes', 'string', 'max:255'],
+            'category_id' => ['nullable', 'integer', 'exists:test_categories,id'],
             'skill' => ['sometimes', Rule::enum(Skill::class)],
             'is_combo' => ['sometimes', 'boolean'],
             'thumbnail_url' => ['nullable', 'string', 'max:2048'],
             'duration_minutes' => ['sometimes', 'integer', 'min:1'],
             'total_score' => ['sometimes', 'numeric', 'min:0'],
             'scoring_method' => ['sometimes', 'string', 'max:50'],
+            'shuffle_questions' => ['sometimes', 'boolean'],
             'word_limit' => ['nullable', 'integer', 'min:1'],
             'rubric' => ['nullable', 'string'],
             'is_published' => ['sometimes', 'boolean'],

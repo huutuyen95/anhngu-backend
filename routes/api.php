@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\AdminAttemptController;
 use App\Http\Controllers\Api\AdminTestController;
+use App\Http\Controllers\Api\TestCategoryController;
+use App\Http\Controllers\Api\TestImportController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -130,7 +132,16 @@ Route::prefix('v1')->group(function () {
             Route::get('assignable-content', [ContentController::class, 'index']);
             Route::post('assignments', [AssignmentController::class, 'store']);
 
-            // Đề thi: CRUD + editor cấu trúc (Part → Section → Question → Option)
+            // Đề thi: thư mục (cây theo lớp) + hành động mở rộng + CRUD + editor cấu trúc
+            Route::get('admin/test-categories', [TestCategoryController::class, 'index']);
+            Route::put('admin/test-categories/sync', [TestCategoryController::class, 'sync']);
+            Route::get('admin/tests/word-template', [TestImportController::class, 'template']);
+            Route::post('admin/tests/import-word', [TestImportController::class, 'dryRun']);
+            Route::post('admin/tests/import-word/commit', [TestImportController::class, 'commit']);
+            Route::post('admin/tests/{test}/sections/{section}/audio', [TestImportController::class, 'sectionAudio']);
+            Route::post('admin/tests/{test}/duplicate', [AdminTestController::class, 'duplicate']);
+            Route::patch('admin/tests/{test}/category', [AdminTestController::class, 'moveCategory']);
+            Route::get('admin/tests/{test}/preflight', [AdminTestController::class, 'preflight']);
             Route::put('admin/tests/{test}/structure', [AdminTestController::class, 'saveStructure']);
             Route::apiResource('admin/tests', AdminTestController::class);
 

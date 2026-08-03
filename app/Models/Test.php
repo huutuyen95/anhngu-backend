@@ -14,6 +14,7 @@ class Test extends Model
 
     protected $fillable = [
         'created_by',
+        'category_id',
         'title',
         'slug',
         'skill',
@@ -22,6 +23,7 @@ class Test extends Model
         'duration_minutes',
         'total_score',
         'scoring_method',
+        'shuffle_questions',
         'word_limit',
         'rubric',
         'ai_grading',
@@ -34,6 +36,7 @@ class Test extends Model
             'skill' => Skill::class,
             'is_combo' => 'boolean',
             'ai_grading' => 'boolean',
+            'shuffle_questions' => 'boolean',
             'is_published' => 'boolean',
             'total_score' => 'decimal:2',
         ];
@@ -42,6 +45,11 @@ class Test extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(TestCategory::class);
     }
 
     public function parts(): HasMany

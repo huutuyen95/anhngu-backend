@@ -61,11 +61,43 @@ class AdminTestController extends Controller
         return response()->json(['test' => new TestResource($updated)]);
     }
 
-    public function destroy(Test $test): JsonResponse
+    public function destroy(Request $request, Test $test): JsonResponse
     {
+        $attemptsCount = $test->attempts()->count();
+
+        if ($attemptsCount > 0 && ! $request->boolean('force')) {
+            return response()->json([
+                'attempts_count' => $attemptsCount,
+                'message' => "Đề đã có {$attemptsCount} bài làm. Xoá sẽ mất toàn bộ, không khôi phục được.",
+            ], 409);
+        }
+
         $this->tests->delete($test);
 
         return response()->json(['message' => 'Đã xoá đề thi.']);
+    }
+
+    public function duplicate(Test $test, Request $request): JsonResponse
+    {
+        $copy = $this->tests->duplicate($test, $request->user());
+
+        return response()->json(['test' => new TestResource($copy)], 201);
+    }
+
+    public function moveCategory(Request $request, Test $test): JsonResponse
+    {
+        $data = $request->validate([
+            'category_id' => ['nullable', 'integer', 'exists:test_categories,id'],
+        ]);
+
+        $updated = $this->tests->moveCategory($test, $data['category_id'] ?? null);
+
+        return response()->json(['test' => new TestResource($updated)]);
+    }
+
+    public function preflight(Test $test): JsonResponse
+    {
+        return response()->json($this->tests->preflight($test));
     }
 
     public function saveStructure(SaveStructureRequest $request, Test $test): JsonResponse

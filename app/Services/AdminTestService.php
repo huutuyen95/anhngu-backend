@@ -28,9 +28,15 @@ class AdminTestService
         $dir = ($filters['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
 
         $page = Test::query()
+            ->with('category:id,name')
+            ->withCount('attempts')
             ->when($teacher->role !== UserRole::Admin, fn ($q) => $q->where('created_by', $teacher->id))
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where('title', 'like', "%{$term}%"))
             ->when($filters['skill'] ?? null, fn ($q, $skill) => $q->where('skill', $skill))
+            ->when(
+                ($filters['category_id'] ?? null) !== null && ($filters['category_id'] ?? '') !== '',
+                fn ($q) => $q->where('category_id', (int) $filters['category_id'])
+            )
             ->when(
                 array_key_exists('is_published', $filters) && $filters['is_published'] !== null && $filters['is_published'] !== '',
                 fn ($q) => $q->where('is_published', filter_var($filters['is_published'], FILTER_VALIDATE_BOOLEAN))
@@ -54,6 +60,7 @@ class AdminTestService
     {
         return Test::create([
             'created_by' => $teacher->id,
+            'category_id' => $data['category_id'] ?? null,
             'title' => $data['title'],
             'slug' => $this->uniqueSlug($data['title']),
             'skill' => $data['skill'],
@@ -61,7 +68,8 @@ class AdminTestService
             'thumbnail_url' => $data['thumbnail_url'] ?? null,
             'duration_minutes' => $data['duration_minutes'] ?? 60,
             'total_score' => $data['total_score'] ?? 10,
-            'scoring_method' => $data['scoring_method'] ?? 'by_correct_count',
+            // Thang điểm 10 chia đều: điểm mỗi câu = 10 / tổng số câu.
+            'scoring_method' => $data['scoring_method'] ?? 'scale_10_even',
             'word_limit' => $data['word_limit'] ?? null,
             'rubric' => $data['rubric'] ?? null,
             'is_published' => $data['is_published'] ?? false,
@@ -74,8 +82,8 @@ class AdminTestService
     public function update(Test $test, array $data): Test
     {
         $fields = [
-            'title', 'skill', 'is_combo', 'thumbnail_url', 'duration_minutes',
-            'total_score', 'scoring_method', 'word_limit', 'rubric', 'is_published',
+            'title', 'category_id', 'skill', 'is_combo', 'thumbnail_url', 'duration_minutes',
+            'total_score', 'scoring_method', 'shuffle_questions', 'word_limit', 'rubric', 'is_published',
         ];
         $payload = array_intersect_key($data, array_flip($fields));
 
@@ -91,6 +99,123 @@ class AdminTestService
     public function delete(Test $test): void
     {
         $test->delete();
+    }
+
+    /**
+     * Nhân bản đề + toàn bộ cây part/section/question/option (trong 1 transaction).
+     */
+    public function duplicate(Test $test, User $teacher): Test
+    {
+        return DB::transaction(function () use ($test, $teacher) {
+            $copy = $test->replicate(['slug']);
+            $copy->created_by = $teacher->id;
+            $copy->title = $test->title.' (bản sao)';
+            $copy->slug = $this->uniqueSlug($copy->title);
+            $copy->is_published = false;
+            $copy->save();
+
+            $test->load('parts.sections.questions.options');
+
+            foreach ($test->parts as $part) {
+                $newPart = $part->replicate(['test_id']);
+                $newPart->test_id = $copy->id;
+                $newPart->save();
+
+                foreach ($part->sections as $section) {
+                    $newSection = $section->replicate(['test_part_id']);
+                    $newSection->test_part_id = $newPart->id;
+                    $newSection->save();
+
+                    foreach ($section->questions as $question) {
+                        $newQuestion = $question->replicate(['test_section_id']);
+                        $newQuestion->test_section_id = $newSection->id;
+                        $newQuestion->save();
+
+                        foreach ($question->options as $option) {
+                            $newOption = $option->replicate(['question_id']);
+                            $newOption->question_id = $newQuestion->id;
+                            $newOption->save();
+                        }
+                    }
+                }
+            }
+
+            $copy->setAttribute('question_count', $copy->questionCount());
+
+            return $copy;
+        });
+    }
+
+    public function moveCategory(Test $test, ?int $categoryId): Test
+    {
+        $test->update(['category_id' => $categoryId]);
+
+        return $test->fresh(['category']);
+    }
+
+    /**
+     * Checklist "kiểm tra trước khi giao" (A4prev). Mỗi mục: ok(bool) + label + hint.
+     *
+     * @return array<string, mixed>
+     */
+    public function preflight(Test $test): array
+    {
+        $test->load('parts.sections.questions.options');
+
+        $questions = $test->parts->flatMap->sections->flatMap->questions;
+        $sections = $test->parts->flatMap->sections;
+
+        $autoTypes = ['multiple_choice', 'select', 'fill_blank'];
+        $autoQuestions = $questions->filter(fn ($q) => in_array((string) $q->type->value, $autoTypes, true));
+        $missingAnswer = $autoQuestions->filter(
+            fn ($q) => $q->options->where('is_correct', true)->isEmpty()
+        );
+        $missingExplanation = $questions->filter(fn ($q) => blank($q->explanation));
+
+        $listeningSections = $sections->filter(fn ($s) => filled($s->audio_url) || $test->skill->value === 'listening');
+        $sectionsNeedingAudio = $test->skill->value === 'listening'
+            ? $sections->filter(fn ($s) => blank($s->audio_url))
+            : collect();
+
+        $checks = [
+            [
+                'key' => 'answers',
+                'ok' => $missingAnswer->isEmpty(),
+                'label' => 'Đủ đáp án đúng cho câu tự chấm',
+                'hint' => $missingAnswer->isEmpty() ? 'Tất cả câu trắc nghiệm/điền từ đã có đáp án' : "{$missingAnswer->count()} câu chưa có đáp án đúng",
+            ],
+            [
+                'key' => 'audio',
+                'ok' => $sectionsNeedingAudio->isEmpty(),
+                'label' => 'Đã gắn audio cho phần nghe',
+                'hint' => $sectionsNeedingAudio->isEmpty() ? 'Không thiếu file nghe' : "{$sectionsNeedingAudio->count()} section nghe chưa có file",
+            ],
+            [
+                'key' => 'explanation',
+                'ok' => $missingExplanation->isEmpty(),
+                'label' => 'Có lời giải cho mọi câu',
+                'hint' => $missingExplanation->isEmpty() ? 'Đã có lời giải' : "{$missingExplanation->count()} câu chưa có lời giải",
+            ],
+            [
+                'key' => 'timing',
+                'ok' => (int) $test->duration_minutes > 0 && $questions->isNotEmpty(),
+                'label' => 'Thời gian & thang điểm hợp lệ',
+                'hint' => "{$test->duration_minutes} phút · thang 10 chia đều · {$questions->count()} câu",
+            ],
+            [
+                'key' => 'category',
+                'ok' => $test->category_id !== null,
+                'label' => 'Đã gán thư mục lớp',
+                'hint' => $test->category_id !== null ? 'Đã có thư mục' : 'Chưa gán thư mục cho đề',
+            ],
+        ];
+
+        return [
+            'checks' => $checks,
+            'all_ok' => collect($checks)->every(fn ($c) => $c['ok']),
+            'question_count' => $questions->count(),
+            'has_listening' => $listeningSections->isNotEmpty(),
+        ];
     }
 
     /**
