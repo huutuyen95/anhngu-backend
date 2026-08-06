@@ -16,10 +16,12 @@ Máy dev KHÔNG cài PHP/Composer/MySQL trực tiếp. MỌI lệnh phải chạ
 gọi từ thư mục `anhngu-infra`:
 
 ```bash
-docker compose exec backend php artisan <lệnh>
-docker compose exec backend composer <lệnh>
-docker compose exec backend php artisan test
+docker compose -f ../docker-compose.yml exec backend php artisan <lệnh>
+docker compose -f ../docker-compose.yml exec backend composer <lệnh>
+docker compose -f ../docker-compose.yml exec backend php artisan test
 ```
+
+(Gọi từ thư mục `anhngu-infra` thì bỏ `-f ../docker-compose.yml` đi cũng được.)
 
 KHÔNG gọi `php`, `composer`, `artisan` trực tiếp trên máy (không có, sẽ lỗi).
 Sửa file code trong `backend/` là container thấy ngay (bind-mount).
@@ -37,21 +39,75 @@ Sửa file code trong `backend/` là container thấy ngay (bind-mount).
 - **Lớp học**: `classrooms` → `class_sessions` (buổi) → `session_items` (polymorphic).
 - **Đề thi**: `tests` → `test_parts` → `test_sections` → `questions` → `question_options`.
   Làm bài: `test_attempts` → `attempt_answers` (+ `attempt_skill_scores` cho đề combo).
+  Đề xếp theo thư mục: `test_categories` (`tests.category_id`).
 - **Flashcard**: `decks` → `cards` → `card_progress`.
 - **Nhiệm vụ**: `missions` (polymorphic). **Log hoạt động**: `activity_logs` (dựng báo cáo).
 
-### 4 loại câu hỏi (đúng theo hệ thống gốc — KHÔNG tự thêm dạng khác)
+### Loại câu hỏi (chốt theo `App\Enums\QuestionType` — KHÔNG tự thêm dạng khác)
 
-`questions.type` ∈ `multiple_choice` | `fill_blank` | `select` | `upload`.
+`questions.type` ∈ `multiple_choice` | `fill_blank` | `select` | `upload` | `writing` | `speaking`.
+
+- Cột `questions.type` nay là `string(30)` (migration `2026_07_31_090001`) chứ không còn `enum` DB —
+  thêm case mới chỉ cần sửa `QuestionType`, không phải ALTER MODIFY.
+- `upload` là case **cũ còn sót lại** trong enum: `TestGradingService` vẫn không tự chấm nó, nhưng
+  câu mới dùng `writing` (viết) / `speaking` (nói). Đừng tạo câu `upload` mới.
+
 Chi tiết + cách chấm điểm xem `docs/PHAN-TICH-DE-THI.md`.
+
+### Trường phục vụ writing / speaking (verify qua migrations)
+
+- `questions.images` (json, cast `array`) — danh sách URL ảnh gợi ý (câu speaking mô tả tranh...).
+- `questions.record_limit_seconds` — giới hạn thời lượng ghi âm (giây); `null` = không giới hạn.
+- `attempt_answers.answer_file_url` — URL audio học sinh nộp cho câu speaking.
+- `attempt_answers.play_count` + `test_sections.max_plays` — đếm & chặn số lần nghe ở server.
+- `attempt_answers.score` / `feedback` / `graded_by` / `graded_at` — kết quả cô chấm tay.
+- `tests.word_limit`, `tests.rubric` — cấu hình câu writing. `tests.shuffle_questions`,
+  `tests.ai_grading` (mặc định `false`, AI chấm để giai đoạn sau).
+
+### Endpoint đề thi (prefix `/api/v1`, xem `routes/api.php`)
+
+Học sinh (`auth:sanctum`):
+
+- `GET tests` — danh sách đề đã publish + lượt điểm cao nhất của mình.
+- `GET tests/{test}` — cấu trúc đề (404 nếu chưa publish), ẩn đáp án.
+- `POST tests/{test}/attempts` · `PUT attempts/{attempt}/answers` · `POST attempts/{attempt}/submit`
+  · `GET attempts/{attempt}/result`.
+- `POST attempts/{attempt}/answers/{question}/audio` — nộp audio câu speaking
+  (mp3/m4a/wav/ogg/aac/webm, ≤ 20 MB) · `DELETE` cùng đường dẫn để xoá ghi lại
+  (`AttemptAudioService`).
+
+Giáo viên / admin (`role:teacher,admin`):
+
+- `POST media/upload` — upload ảnh (jpg/jpeg/png/webp ≤ 2 MB) hoặc audio khi `type=audio`
+  (mp3/m4a/wav/ogg/aac ≤ 20 MB); trả `{ url }`.
+- `admin/tests` (apiResource) + `admin/tests/{test}/duplicate|preflight|category|structure`,
+  import Word (`admin/tests/import-word`, `.../commit`, `admin/tests/word-template`),
+  `admin/tests/{test}/sections/{section}/audio`, `admin/test-categories`.
+- `GET admin/attempts` (mặc định lọc `status=pending_review`) · `GET admin/attempts/{attempt}` ·
+  `POST admin/attempts/{attempt}/grade`.
 
 ## Quy ước
 
-- **Bảo mật đáp án**: `QuestionOption` để `is_correct` trong `$hidden` — không lộ đáp án đúng
-  khi trả đề cho học sinh. Chỉ endpoint kết quả (sau khi nộp) mới trả đáp án đúng.
+- **Bảo mật đáp án**: `QuestionOption` để `is_correct` trong `$hidden`, và `TestDetailResource`
+  chỉ đưa `is_correct` + `explanation` vào output khi `revealAnswers: true`. Học sinh làm bài
+  (`GET /tests/{test}`) → `revealAnswers: false`; endpoint kết quả sau khi nộp và khu admin sửa đề
+  → `true`. Cờ thứ hai `forTeacher: true` (chỉ `AdminTestController`) lộ thêm cấu hình đề
+  (`is_published`, `rubric`, `scoring_method`, `shuffle_questions`, `category_id`...).
 - **Timer server-side**: deadline = `started_at + duration`. Không tin timer client.
-- **Chấm điểm**: chỉ tự chấm `multiple_choice`/`fill_blank`/`select`. `upload` (nói/viết) để
-  `is_correct = null`, chờ AI hoặc giáo viên chấm (giai đoạn sau).
+- **Chấm điểm** (`TestGradingService` → `AttemptGradingService`):
+  - Nộp bài: tự chấm `multiple_choice`/`select`/`fill_blank`; `writing`/`speaking`/`upload` để
+    `is_correct = null`. Điểm = `correct / gradable * tests.total_score`.
+  - Đề **có câu `writing`/`speaking`** → attempt sang `pending_review`, giữ điểm tạm (chỉ phần tự
+    chấm) và **chưa** dedup lượt điểm cao nhất.
+  - Giáo viên chấm tay qua `POST /admin/attempts/{attempt}/grade` (điểm + nhận xét từng câu, clamp
+    theo `questions.score`) → ghi `graded_by`/`graded_at`, tính lại tổng, chạy
+    `reconcileBestAttempt(..., 'graded')` → attempt sang `graded`.
+  - Đề không có câu nói/viết → nộp xong là `submitted` luôn.
+  - AI chấm chưa làm — mới có cờ `tests.ai_grading`.
+- **Trạng thái attempt** (`test_attempts.status`, string): `in_progress` → `pending_review` →
+  `graded`, hoặc `in_progress` → `submitted`.
+- **Dedup lượt làm**: mỗi (user, test) chỉ giữ 1 dòng `test_attempts` = lượt điểm cao nhất
+  (`reconcileBestAttempt` xoá lượt thấp hơn kèm `attempt_answers`).
 - Git: Conventional Commits (`feat:`/`fix:`/...), làm nhánh `feature/...` → PR → `main`.
 - KHÔNG commit `vendor/`, `.env`.
 
@@ -64,6 +120,6 @@ Chi tiết + cách chấm điểm xem `docs/PHAN-TICH-DE-THI.md`.
 ## Kiểm tra sau khi sửa
 
 ```bash
-docker compose exec backend php artisan test
-docker compose exec backend php artisan route:list   # xem route hiện có
+docker compose -f ../docker-compose.yml exec backend php artisan test
+docker compose -f ../docker-compose.yml exec backend php artisan route:list   # xem route hiện có
 ```
