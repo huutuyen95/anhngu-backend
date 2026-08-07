@@ -14,6 +14,7 @@ class ActivityLog extends Model
 
     protected $fillable = [
         'user_id',
+        'test_id',
         'type',
         'subject',
         'duration_seconds',
@@ -34,5 +35,11 @@ class ActivityLog extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** Chỉ có giá trị với log `type = test_attempt`. */
+    public function test(): BelongsTo
+    {
+        return $this->belongsTo(Test::class);
     }
 }

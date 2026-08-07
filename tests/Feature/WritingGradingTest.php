@@ -97,6 +97,80 @@ class WritingGradingTest extends TestCase
         $this->assertNotNull($answer->graded_at);
     }
 
+    /** Nộp bài writing rồi trả về entry của đề đó trong `GET /api/v1/tests`. */
+    private function submitAndListEntry(User $student, Test $test): array
+    {
+        $question = $test->parts->first()->sections->first()->questions->first();
+
+        $attemptId = $this->actingAs($student)
+            ->postJson("/api/v1/tests/{$test->id}/attempts")
+            ->json('attempt_id');
+        $this->actingAs($student)->putJson("/api/v1/attempts/{$attemptId}/answers", [
+            'answers' => [['question_id' => $question->id, 'answer_text' => 'It was a normal day.']],
+        ]);
+        $this->actingAs($student)->postJson("/api/v1/attempts/{$attemptId}/submit")->assertOk();
+
+        return [$attemptId, $question];
+    }
+
+    private function listEntry(User $student, Test $test): array
+    {
+        $response = $this->actingAs($student)->getJson('/api/v1/tests');
+        $response->assertOk();
+
+        return collect($response->json())->firstWhere('id', $test->id);
+    }
+
+    public function test_list_shows_pending_review_instead_of_treating_it_as_not_started(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $test = $this->makeWritingTest($teacher);
+
+        $this->submitAndListEntry($student, $test);
+
+        $entry = $this->listEntry($student, $test);
+
+        $this->assertNotNull($entry['attempt'], 'Đề chờ chấm không được hiện "chưa làm".');
+        $this->assertSame('pending_review', $entry['attempt']['status']);
+        // Điểm tạm của phần tự chấm chưa phải điểm thật → không trả ra làm best_score.
+        $this->assertNull($entry['attempt']['best_score']);
+    }
+
+    public function test_list_shows_graded_status_and_score_after_teacher_grades(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $test = $this->makeWritingTest($teacher);
+
+        [$attemptId, $question] = $this->submitAndListEntry($student, $test);
+
+        $this->actingAs($teacher)->postJson("/api/v1/admin/attempts/{$attemptId}/grade", [
+            'answers' => [['question_id' => $question->id, 'score' => 7.5, 'feedback' => 'Khá tốt.']],
+        ])->assertOk();
+
+        $entry = $this->listEntry($student, $test);
+
+        $this->assertNotNull($entry['attempt'], 'Đề đã chấm xong không được hiện "chưa làm".');
+        $this->assertSame('graded', $entry['attempt']['status']);
+        $this->assertEquals(7.5, $entry['attempt']['best_score']);
+    }
+
+    public function test_submitting_logs_activity_with_test_id(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $test = $this->makeWritingTest($teacher);
+
+        $this->submitAndListEntry($student, $test);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $student->id,
+            'test_id' => $test->id,
+            'type' => 'test_attempt',
+        ]);
+    }
+
     public function test_student_cannot_access_admin_attempt_endpoints(): void
     {
         $teacher = User::factory()->create(['role' => 'teacher']);
