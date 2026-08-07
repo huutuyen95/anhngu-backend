@@ -212,16 +212,17 @@ class StudentService
      * @param  array<int, array<string, mixed>>  $rows
      * @return array{created: array<int, array<string, string>>, summary: array<string, int>}
      */
-    public function commitImport(array $rows): array
+    /**
+     * @param  'skip'|'update'  $onDuplicate  Dòng email trùng: bỏ qua, hoặc cập nhật HS hiện có.
+     */
+    public function commitImport(array $rows, string $onDuplicate = 'skip'): array
     {
         $preview = $this->previewImport($rows);
         $created = [];
+        $updated = 0;
 
-        DB::transaction(function () use ($preview, $rows, &$created) {
+        DB::transaction(function () use ($preview, $rows, $onDuplicate, &$created, &$updated) {
             foreach ($preview['rows'] as $idx => $line) {
-                if ($line['status'] !== 'ok') {
-                    continue;
-                }
                 $classroomIds = [];
                 if (! empty($line['class'])) {
                     $classroom = Classroom::where('name', $line['class'])->first();
@@ -229,13 +230,30 @@ class StudentService
                         $classroomIds[] = $classroom->id;
                     }
                 }
-                $result = $this->create([
-                    'name' => $line['name'],
-                    'email' => $line['email'],
-                    'phone' => $rows[$idx]['phone'] ?? null,
-                    'classroom_ids' => $classroomIds,
-                ]);
-                $created[] = ['email' => $line['email'], 'password' => $result['password']];
+
+                if ($line['status'] === 'ok') {
+                    $result = $this->create([
+                        'name' => $line['name'],
+                        'email' => $line['email'],
+                        'phone' => $rows[$idx]['phone'] ?? null,
+                        'classroom_ids' => $classroomIds,
+                    ]);
+                    $created[] = ['email' => $line['email'], 'password' => $result['password']];
+                } elseif ($line['status'] === 'duplicate' && $onDuplicate === 'update') {
+                    $existing = User::where('email', $line['email'])->first();
+                    if ($existing) {
+                        $existing->update([
+                            'name' => $line['name'] ?: $existing->name,
+                            'phone' => $rows[$idx]['phone'] ?? $existing->phone,
+                        ]);
+                        if ($classroomIds !== []) {
+                            $existing->classes()->syncWithoutDetaching(
+                                collect($classroomIds)->mapWithKeys(fn ($id) => [$id => ['status' => 'studying']])->all()
+                            );
+                        }
+                        $updated++;
+                    }
+                }
             }
         });
 
@@ -243,6 +261,7 @@ class StudentService
             'created' => $created,
             'summary' => [
                 'ok' => count($created),
+                'updated' => $updated,
                 'duplicate' => $preview['summary']['duplicate'],
                 'error' => $preview['summary']['error'],
             ],

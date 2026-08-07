@@ -126,6 +126,38 @@ class StudentTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'valid1@example.com']);
     }
 
+    public function test_check_email_reports_availability(): void
+    {
+        $teacher = $this->teacher();
+        User::factory()->create(['email' => 'taken@example.com']);
+
+        $this->actingAs($teacher)->getJson('/api/v1/students/check-email?email=free@example.com')
+            ->assertOk()->assertJson(['available' => true]);
+        $this->actingAs($teacher)->getJson('/api/v1/students/check-email?email=taken@example.com')
+            ->assertOk()->assertJson(['available' => false]);
+    }
+
+    public function test_import_update_mode_updates_existing_student(): void
+    {
+        Excel::fake();
+        $teacher = $this->teacher();
+        $existing = User::factory()->create(['email' => 'dup@example.com', 'name' => 'Old Name']);
+
+        Excel::shouldReceive('toArray')->andReturn([[
+            ['name' => 'New Name', 'email' => 'dup@example.com', 'phone' => '0900', 'class' => null, 'note' => null],
+        ]]);
+
+        $this->actingAs($teacher)
+            ->postJson('/api/v1/students/import?dry_run=0', [
+                'file' => UploadedFile::fake()->create('s.xlsx', 10),
+                'on_duplicate' => 'update',
+            ])
+            ->assertOk()
+            ->assertJsonPath('summary.updated', 1);
+
+        $this->assertEquals('New Name', $existing->fresh()->name);
+    }
+
     public function test_student_cannot_access_students_api(): void
     {
         $student = User::factory()->create();

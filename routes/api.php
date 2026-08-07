@@ -150,6 +150,7 @@ Route::prefix('v1')->group(function () {
             Route::get('admin/attempts/{attempt}', [AdminAttemptController::class, 'show']);
             Route::post('admin/attempts/{attempt}/grade', [AdminAttemptController::class, 'grade']);
 
+            Route::get('students/check-email', [StudentController::class, 'checkEmail']);
             Route::get('students/import-template', [StudentController::class, 'importTemplate']);
             Route::post('students/import', [StudentController::class, 'import']);
             Route::post('students/bulk', [StudentController::class, 'bulk']);

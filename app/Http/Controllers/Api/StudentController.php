@@ -113,7 +113,25 @@ class StudentController extends Controller
             return response()->json($this->students->previewImport($rows));
         }
 
-        return response()->json($this->students->commitImport($rows));
+        $onDuplicate = $request->input('on_duplicate') === 'update' ? 'update' : 'skip';
+
+        return response()->json($this->students->commitImport($rows, $onDuplicate));
+    }
+
+    /** Kiểm tra email đã tồn tại chưa (kể cả đã xoá mềm) — dùng cho blur ở form thêm/sửa. */
+    public function checkEmail(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'ignore_id' => ['nullable', 'integer'],
+        ]);
+
+        $exists = User::withTrashed()
+            ->where('email', $data['email'])
+            ->when($data['ignore_id'] ?? null, fn ($q, $id) => $q->where('id', '!=', $id))
+            ->exists();
+
+        return response()->json(['available' => ! $exists]);
     }
 
     public function importTemplate(): BinaryFileResponse
