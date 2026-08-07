@@ -63,6 +63,15 @@ class Test extends Model
         return $this->hasMany(TestAttempt::class);
     }
 
+    /**
+     * Log mọi lượt nộp (kể cả lượt đã bị dedup xoá khỏi `test_attempts`) — nguồn duy nhất
+     * tính được điểm TB / tổng lượt làm. Lọc `type = test_attempt` ở phía gọi.
+     */
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
+    }
+
     public function questionCount(): int
     {
         return Question::whereHas('section.part', fn ($query) => $query->where('test_id', $this->id))->count();

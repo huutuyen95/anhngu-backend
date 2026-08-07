@@ -183,7 +183,7 @@ class TestAttemptBestScoreTest extends TestCase
         $after = $this->actingAs($student)->getJson('/api/v1/tests');
         $after->assertOk();
 
-        $entry = collect($after->json())->firstWhere('id', $test->id);
+        $entry = collect($after->json('data'))->firstWhere('id', $test->id);
         $this->assertEquals(10.0, $entry['attempt']['best_score']);
         $this->assertSame(2, $entry['attempt']['attempt_count']);
         $this->assertSame('submitted', $entry['attempt']['status']);

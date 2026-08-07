@@ -16,9 +16,21 @@ class TestController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $tests = $this->tests->list($request->user());
+        $filters = $request->only(['q', 'skill', 'status', 'sort', 'per_page']);
+        $student = $request->user();
 
-        return response()->json(StudentTestResource::collection($tests));
+        $page = $this->tests->list($filters, $student);
+
+        return response()->json([
+            'data' => StudentTestResource::collection($page->items()),
+            'meta' => [
+                'current_page' => $page->currentPage(),
+                'last_page' => $page->lastPage(),
+                'per_page' => $page->perPage(),
+                'total' => $page->total(),
+                ...$this->tests->summary($filters, $student),
+            ],
+        ]);
     }
 
     public function show(Test $test)

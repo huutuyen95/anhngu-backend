@@ -118,7 +118,7 @@ class WritingGradingTest extends TestCase
         $response = $this->actingAs($student)->getJson('/api/v1/tests');
         $response->assertOk();
 
-        return collect($response->json())->firstWhere('id', $test->id);
+        return collect($response->json('data'))->firstWhere('id', $test->id);
     }
 
     public function test_list_shows_pending_review_instead_of_treating_it_as_not_started(): void

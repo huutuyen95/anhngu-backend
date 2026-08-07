@@ -32,7 +32,12 @@ class StudentTestResource extends JsonResource
             'skill' => $this->skill->value,
             'duration_minutes' => $this->duration_minutes,
             'total_score' => (float) $this->total_score,
+            'word_limit' => $this->word_limit,
             'question_count' => (int) $this->question_count,
+            // Chỉ số tổng hợp của cả lớp — đếm trên activity_logs (xem StudentTestService).
+            'attempts_total' => (int) $this->attempts_total,
+            'avg_score' => $this->avg_score !== null ? round((float) $this->avg_score, 1) : null,
+            'created_at' => $this->created_at?->toIso8601String(),
             'category' => $this->categoryPayload(),
             'attempt' => $this->attempt_summary,
         ];

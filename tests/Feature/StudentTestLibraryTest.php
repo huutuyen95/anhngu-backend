@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Classroom;
 use App\Models\Test;
 use App\Models\TestCategory;
@@ -38,12 +39,66 @@ class StudentTestLibraryTest extends TestCase
         return $test->fresh();
     }
 
+    /** Đề writing → nộp xong sẽ ở `pending_review` (nhóm "Chờ cô chấm"). */
+    private function makeWritingTest(User $teacher, array $overrides = []): Test
+    {
+        $test = Test::create(array_merge([
+            'created_by' => $teacher->id,
+            'title' => 'Writing — My Summer Holiday',
+            'slug' => 'writing-summer',
+            'skill' => 'writing',
+            'duration_minutes' => 30,
+            'total_score' => 10,
+            'word_limit' => 150,
+            'is_published' => true,
+        ], $overrides));
+
+        $part = $test->parts()->create(['order' => 1, 'title' => 'Part 1', 'display_mode' => 'default']);
+        $section = $part->sections()->create(['order' => 1, 'instruction' => 'Viết đoạn văn']);
+        $section->questions()->create(['order' => 1, 'type' => 'writing', 'content' => 'Describe.', 'score' => 10]);
+
+        return $test->fresh();
+    }
+
+    private function questionsOf(Test $test)
+    {
+        return $test->load('parts.sections.questions')->parts->first()->sections->first()->questions;
+    }
+
+    /** Bắt đầu lượt làm và trả lời `$answered` câu đầu (không nộp) → attempt ở `in_progress`. */
+    private function startAttempt(User $student, Test $test, int $answered = 0): int
+    {
+        $attemptId = $this->actingAs($student)
+            ->postJson("/api/v1/tests/{$test->id}/attempts")
+            ->json('attempt_id');
+
+        if ($answered > 0) {
+            $answers = $this->questionsOf($test)->take($answered)
+                ->map(fn ($q) => ['question_id' => $q->id, 'answer_text' => 'x'])
+                ->values()->all();
+
+            $this->actingAs($student)
+                ->putJson("/api/v1/attempts/{$attemptId}/answers", ['answers' => $answers])
+                ->assertOk();
+        }
+
+        return $attemptId;
+    }
+
+    private function submitAttempt(User $student, Test $test): int
+    {
+        $attemptId = $this->startAttempt($student, $test, 1);
+        $this->actingAs($student)->postJson("/api/v1/attempts/{$attemptId}/submit")->assertOk();
+
+        return $attemptId;
+    }
+
     private function listEntry(User $student, Test $test): ?array
     {
         $response = $this->actingAs($student)->getJson('/api/v1/tests');
         $response->assertOk();
 
-        return collect($response->json())->firstWhere('id', $test->id);
+        return collect($response->json('data'))->firstWhere('id', $test->id);
     }
 
     public function test_card_returns_description_and_question_count(): void
@@ -123,6 +178,97 @@ class StudentTestLibraryTest extends TestCase
         foreach (['is_published', 'rubric', 'scoring_method', 'shuffle_questions', 'ai_grading'] as $leaked) {
             $this->assertArrayNotHasKey($leaked, $entry);
         }
+    }
+
+    public function test_card_returns_avg_score_and_total_attempts_from_activity_logs(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $other = User::factory()->create(['role' => 'student']);
+        $test = $this->makeTest($teacher);
+
+        // Chỉ số của cả lớp: gồm cả lượt của bạn khác và lượt đã bị dedup xoá khỏi test_attempts.
+        foreach ([[$student, 10.0], [$student, 5.0], [$other, 8.4]] as [$user, $score]) {
+            ActivityLog::create([
+                'user_id' => $user->id,
+                'test_id' => $test->id,
+                'type' => 'test_attempt',
+                'subject' => $test->title,
+                'score' => $score,
+                'created_at' => now(),
+            ]);
+        }
+
+        // Log của loại khác không được tính vào.
+        ActivityLog::create([
+            'user_id' => $student->id, 'test_id' => $test->id,
+            'type' => 'deck_study', 'score' => 1.0, 'created_at' => now(),
+        ]);
+
+        $entry = $this->listEntry($student, $test);
+
+        $this->assertSame(3, $entry['attempts_total']);
+        $this->assertSame(7.8, $entry['avg_score']); // (10 + 5 + 8.4) / 3 = 7.8
+    }
+
+    public function test_card_has_null_stats_when_nobody_has_attempted(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $test = $this->makeTest($teacher);
+
+        $entry = $this->listEntry($student, $test);
+
+        $this->assertSame(0, $entry['attempts_total']);
+        $this->assertNull($entry['avg_score']);
+    }
+
+    public function test_card_returns_word_limit_and_created_at(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $writing = $this->makeWritingTest($teacher);
+
+        $entry = $this->listEntry($student, $writing);
+
+        $this->assertSame(150, $entry['word_limit']);
+        $this->assertNotNull($entry['created_at']);
+    }
+
+    public function test_in_progress_attempt_returns_progress_and_attempt_id(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $test = $this->makeTest($teacher);
+
+        $attemptId = $this->startAttempt($student, $test, 1);
+
+        $entry = $this->listEntry($student, $test);
+
+        $this->assertSame('in_progress', $entry['attempt']['status']);
+        $this->assertSame('doing', $entry['attempt']['bucket']);
+        $this->assertSame($attemptId, $entry['attempt']['id']);
+        $this->assertSame(1, $entry['attempt']['answered_count']);
+        $this->assertSame(2, $entry['attempt']['question_count']);
+        $this->assertNull($entry['attempt']['best_score']);
+    }
+
+    /** Làm lại đề đã nộp: card phải hiện "Đang làm" nhưng vẫn giữ điểm cao nhất cũ. */
+    public function test_new_attempt_on_finished_test_shows_in_progress_but_keeps_best_score(): void
+    {
+        $teacher = User::factory()->create(['role' => 'teacher']);
+        $student = User::factory()->create(['role' => 'student']);
+        $test = $this->makeTest($teacher);
+
+        $this->submitAttempt($student, $test);
+        $this->startAttempt($student, $test, 2);
+
+        $entry = $this->listEntry($student, $test);
+
+        $this->assertSame('in_progress', $entry['attempt']['status']);
+        $this->assertSame('doing', $entry['attempt']['bucket']);
+        $this->assertSame(2, $entry['attempt']['answered_count']);
+        $this->assertNotNull($entry['attempt']['best_score']);
     }
 
     /** Số query không được tăng theo số đề (category/parent/classroom phải eager load). */
