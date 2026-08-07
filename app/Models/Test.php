@@ -16,6 +16,7 @@ class Test extends Model
         'created_by',
         'category_id',
         'title',
+        'description',
         'slug',
         'skill',
         'is_combo',

@@ -20,6 +20,7 @@ class StoreTestRequest extends FormRequest
     {
         return [
             'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:500'],
             'category_id' => ['nullable', 'integer', 'exists:test_categories,id'],
             'skill' => ['required', Rule::enum(Skill::class)],
             'is_combo' => ['sometimes', 'boolean'],
