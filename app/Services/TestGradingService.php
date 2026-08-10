@@ -30,8 +30,11 @@ class TestGradingService
 
             $graded = $this->gradeQuestions($attempt, $test);
 
+            // Log MỌI lượt nộp (kể cả lượt sắp bị dedup xoá) — đây là nguồn duy nhất để tính
+            // điểm TB / tổng lượt làm của một đề.
             ActivityLog::create([
                 'user_id' => $attempt->user_id,
+                'test_id' => $test->id,
                 'type' => 'test_attempt',
                 'subject' => $test->title,
                 'score' => $graded['total_score'],

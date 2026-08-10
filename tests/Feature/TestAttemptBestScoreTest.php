@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\AttemptAnswer;
 use App\Models\Test;
 use App\Models\TestAttempt;
@@ -148,6 +149,26 @@ class TestAttemptBestScoreTest extends TestCase
         $this->assertSame(1, TestAttempt::where('user_id', $student->id)->where('test_id', $test->id)->count());
     }
 
+    /**
+     * test_attempts bị dedup xoá lượt thấp điểm, nên activity_logs phải giữ đủ MỌI lượt (kèm
+     * test_id) — đây là nguồn duy nhất tính được điểm TB / tổng lượt làm thật của một đề.
+     */
+    public function test_every_submission_is_logged_with_test_id_even_when_deduped(): void
+    {
+        $student = User::factory()->create(['role' => 'student']);
+        $test = $this->makeTest();
+
+        $this->submitWithScore($student, $test, 2); // 10 điểm
+        $this->submitWithScore($student, $test, 1); // 5 điểm, dòng test_attempts bị xoá
+
+        $this->assertSame(1, TestAttempt::where('test_id', $test->id)->count());
+
+        $logs = ActivityLog::where('test_id', $test->id)->where('type', 'test_attempt')->get();
+        $this->assertCount(2, $logs, 'activity_logs phải giữ cả lượt bị dedup xoá.');
+        $this->assertEqualsCanonicalizing([10.0, 5.0], $logs->pluck('score')->map(fn ($s) => (float) $s)->all());
+        $this->assertEquals(7.5, round($logs->avg(fn ($log) => (float) $log->score), 2));
+    }
+
     public function test_get_tests_reports_best_score_and_attempt_count(): void
     {
         $student = User::factory()->create(['role' => 'student']);
@@ -162,7 +183,7 @@ class TestAttemptBestScoreTest extends TestCase
         $after = $this->actingAs($student)->getJson('/api/v1/tests');
         $after->assertOk();
 
-        $entry = collect($after->json())->firstWhere('id', $test->id);
+        $entry = collect($after->json('data'))->firstWhere('id', $test->id);
         $this->assertEquals(10.0, $entry['attempt']['best_score']);
         $this->assertSame(2, $entry['attempt']['attempt_count']);
         $this->assertSame('submitted', $entry['attempt']['status']);

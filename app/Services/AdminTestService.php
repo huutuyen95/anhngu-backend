@@ -62,6 +62,7 @@ class AdminTestService
             'created_by' => $teacher->id,
             'category_id' => $data['category_id'] ?? null,
             'title' => $data['title'],
+            'description' => $data['description'] ?? null,
             'slug' => $this->uniqueSlug($data['title']),
             'skill' => $data['skill'],
             'is_combo' => $data['is_combo'] ?? false,
@@ -82,7 +83,7 @@ class AdminTestService
     public function update(Test $test, array $data): Test
     {
         $fields = [
-            'title', 'category_id', 'skill', 'is_combo', 'thumbnail_url', 'duration_minutes',
+            'title', 'description', 'category_id', 'skill', 'is_combo', 'thumbnail_url', 'duration_minutes',
             'total_score', 'scoring_method', 'shuffle_questions', 'word_limit', 'rubric', 'is_published',
         ];
         $payload = array_intersect_key($data, array_flip($fields));
@@ -363,17 +364,7 @@ class AdminTestService
      */
     private function questionCounts(Collection $testIds): Collection
     {
-        if ($testIds->isEmpty()) {
-            return collect();
-        }
-
-        return Question::query()
-            ->join('test_sections', 'questions.test_section_id', '=', 'test_sections.id')
-            ->join('test_parts', 'test_sections.test_part_id', '=', 'test_parts.id')
-            ->whereIn('test_parts.test_id', $testIds)
-            ->selectRaw('test_parts.test_id as test_id, count(*) as question_count')
-            ->groupBy('test_parts.test_id')
-            ->pluck('question_count', 'test_id');
+        return Question::countsByTest($testIds);
     }
 
     private function uniqueSlug(string $title, ?int $ignoreId = null): string

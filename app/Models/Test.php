@@ -16,6 +16,7 @@ class Test extends Model
         'created_by',
         'category_id',
         'title',
+        'description',
         'slug',
         'skill',
         'is_combo',
@@ -60,6 +61,15 @@ class Test extends Model
     public function attempts(): HasMany
     {
         return $this->hasMany(TestAttempt::class);
+    }
+
+    /**
+     * Log mọi lượt nộp (kể cả lượt đã bị dedup xoá khỏi `test_attempts`) — nguồn duy nhất
+     * tính được điểm TB / tổng lượt làm. Lọc `type = test_attempt` ở phía gọi.
+     */
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
     }
 
     public function questionCount(): int

@@ -20,6 +20,7 @@ class TestResource extends JsonResource
         return [
             'id' => $this->id,
             'title' => $this->title,
+            'description' => $this->description,
             'slug' => $this->slug,
             'category_id' => $this->category_id,
             'category_name' => $this->whenLoaded('category', fn () => $this->category?->name),
