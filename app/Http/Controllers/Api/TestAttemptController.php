@@ -140,4 +140,71 @@ class TestAttemptController extends Controller
             ])->values(),
         ]);
     }
+
+    /**
+     * Trạng thái lượt làm để FE khôi phục màn thi: hạn nộp (tính server-side từ
+     * started_at + thời lượng, KHÔNG truyền qua URL), đáp án đã lưu, và bộ đếm thoát tab.
+     */
+    public function show(Request $request, TestAttempt $attempt)
+    {
+        abort_if($attempt->user_id !== $request->user()->id, 403);
+
+        $attempt->load(['test:id,duration_minutes', 'answers']);
+
+        return response()->json([
+            'id' => $attempt->id,
+            'status' => $attempt->status,
+            'started_at' => $attempt->started_at,
+            'deadline' => $attempt->deadlineAt(),
+            'tab_exit_count' => $attempt->tab_exit_count,
+            'tab_exit_limit' => TestAttempt::TAB_EXIT_LIMIT,
+            'answers' => $attempt->answers->map(fn (AttemptAnswer $answer) => [
+                'question_id' => $answer->question_id,
+                'question_option_id' => $answer->question_option_id,
+                'answer_text' => $answer->answer_text,
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * Ghi nhận một lần học sinh rời khỏi tab làm bài. Đếm server-side để reload không
+     * reset được. Vượt quá TAB_EXIT_LIMIT → tự nộp bài ngay và trả kết quả cho FE.
+     */
+    public function tabExit(Request $request, TestAttempt $attempt)
+    {
+        abort_if($attempt->user_id !== $request->user()->id, 403);
+
+        $limit = TestAttempt::TAB_EXIT_LIMIT;
+
+        // Đã nộp (tự động hoặc thủ công) → không đếm thêm, không nộp lại.
+        if ($attempt->status !== 'in_progress') {
+            return response()->json([
+                'tab_exit_count' => $attempt->tab_exit_count,
+                'tab_exit_limit' => $limit,
+                'auto_submitted' => true,
+                'status' => $attempt->status,
+            ]);
+        }
+
+        $attempt->increment('tab_exit_count');
+        $attempt->refresh();
+
+        if ($attempt->tab_exit_count > $limit) {
+            $result = $this->gradingService->submit($attempt);
+
+            return response()->json([
+                'tab_exit_count' => $attempt->tab_exit_count,
+                'tab_exit_limit' => $limit,
+                'auto_submitted' => true,
+                'reason' => 'tab_exit_exceeded',
+                'result' => $result,
+            ]);
+        }
+
+        return response()->json([
+            'tab_exit_count' => $attempt->tab_exit_count,
+            'tab_exit_limit' => $limit,
+            'auto_submitted' => false,
+        ]);
+    }
 }

@@ -70,6 +70,39 @@ class User extends Authenticatable
     }
 
     /**
+     * Loại token theo khu: học sinh dùng token "student", giáo viên/admin dùng token "teacher".
+     * Dùng làm tên token (Sanctum) để phân biệt 2 loại token khi cấp phát & thu hồi.
+     */
+    public function tokenType(): string
+    {
+        return $this->isStudent() ? 'student' : 'teacher';
+    }
+
+    /**
+     * Phạm vi (abilities) gắn vào token theo role. Teacher/admin là superset của student
+     * (giáo viên vẫn xem được nội dung học sinh); student KHÔNG có ability 'teacher'
+     * nên token học sinh không thể gọi các endpoint khu giáo viên.
+     *
+     * @return list<string>
+     */
+    public function tokenAbilities(): array
+    {
+        return match ($this->role) {
+            UserRole::Admin => ['admin', 'teacher', 'student'],
+            UserRole::Teacher => ['teacher', 'student'],
+            UserRole::Student => ['student'],
+        };
+    }
+
+    /**
+     * Cấp một token đã gắn đúng loại + phạm vi cho role của user.
+     */
+    public function issueRoleToken(): \Laravel\Sanctum\NewAccessToken
+    {
+        return $this->createToken($this->tokenType(), $this->tokenAbilities());
+    }
+
+    /**
      * Các lớp học viên tham gia (học sinh).
      */
     public function classes(): BelongsToMany

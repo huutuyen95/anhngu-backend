@@ -29,8 +29,14 @@ Sửa file code trong `backend/` là container thấy ngay (bind-mount).
 ## Kiến trúc
 
 - **API-only**, prefix `/api/v1` (`routes/api.php`).
-- Auth bằng Sanctum token. Phân quyền theo `role` (admin / teacher / student) qua middleware
-  `role:teacher,admin` (alias khai trong `bootstrap/app.php`).
+- Auth bằng Sanctum token. **2 loại token tách biệt theo khu** (cấp lúc login/register qua
+  `User::issueRoleToken()`): token **`student`** (abilities `['student']`) và token **`teacher`**
+  (teacher `['teacher','student']`, admin `['admin','teacher','student']`). Token học sinh KHÔNG
+  có ability `teacher` nên không gọi được endpoint khu giáo viên.
+- Phân quyền 2 lớp: middleware **`role:teacher,admin`** (chốt theo `role` trong DB — nguồn chuẩn,
+  chạy cả trong test) + **`token:teacher`** (`EnsureTokenScope` — chặn theo phạm vi token thật;
+  tự bỏ qua khi auth không qua PAT thật, vd `actingAs` trong test). Cả hai alias khai ở
+  `bootstrap/app.php`.
 - Cấu hình đọc từ **biến môi trường** (docker `env_file` ở infra: `env/backend.env`).
   KHÔNG sửa `.env` thủ công, KHÔNG commit `.env`.
 
@@ -70,8 +76,12 @@ Học sinh (`auth:sanctum`):
 
 - `GET tests` — danh sách đề đã publish + lượt điểm cao nhất của mình.
 - `GET tests/{test}` — cấu trúc đề (404 nếu chưa publish), ẩn đáp án.
-- `POST tests/{test}/attempts` · `PUT attempts/{attempt}/answers` · `POST attempts/{attempt}/submit`
-  · `GET attempts/{attempt}/result`.
+- `POST tests/{test}/attempts` · `GET attempts/{attempt}` (trạng thái lượt: hạn nộp tính
+  server-side `started_at + duration`, đáp án đã lưu để làm tiếp, `tab_exit_count/limit`) ·
+  `PUT attempts/{attempt}/answers` · `POST attempts/{attempt}/submit` · `GET attempts/{attempt}/result`.
+- **Chống rời tab** (`POST attempts/{attempt}/tab-exit`): đếm số lần học sinh rời màn thi
+  (lưu ở `test_attempts.tab_exit_count` để reload không reset). Vượt `TestAttempt::TAB_EXIT_LIMIT`
+  (mặc định 3) → server **tự nộp bài** và trả kết quả. Deadline KHÔNG truyền qua URL nữa.
 - `POST attempts/{attempt}/answers/{question}/audio` — nộp audio câu speaking
   (mp3/m4a/wav/ogg/aac/webm, ≤ 20 MB) · `DELETE` cùng đường dẫn để xoá ghi lại
   (`AttemptAudioService`).

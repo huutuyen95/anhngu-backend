@@ -41,7 +41,7 @@ class AuthController extends Controller
 
         return response()->json([
             'user' => new UserResource($user),
-            'token' => $user->createToken('spa')->plainTextToken,
+            'token' => $user->issueRoleToken()->plainTextToken,
         ], 201);
     }
 
@@ -79,7 +79,7 @@ class AuthController extends Controller
 
         return response()->json([
             'user' => new UserResource($user),
-            'token' => $user->createToken('spa')->plainTextToken,
+            'token' => $user->issueRoleToken()->plainTextToken,
         ]);
     }
 

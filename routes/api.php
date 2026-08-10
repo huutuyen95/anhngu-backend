@@ -54,13 +54,17 @@ Route::prefix('v1')->group(function () {
         Route::get('tests', [TestController::class, 'index']);
         Route::get('tests/{test}', [TestController::class, 'show']);
         Route::post('tests/{test}/attempts', [TestAttemptController::class, 'start']);
+        Route::get('attempts/{attempt}', [TestAttemptController::class, 'show']);
+        Route::post('attempts/{attempt}/tab-exit', [TestAttemptController::class, 'tabExit']);
         Route::put('attempts/{attempt}/answers', [TestAttemptController::class, 'saveAnswers']);
         Route::post('attempts/{attempt}/answers/{question}/audio', [TestAttemptController::class, 'uploadAudio']);
         Route::delete('attempts/{attempt}/answers/{question}/audio', [TestAttemptController::class, 'deleteAudio']);
         Route::post('attempts/{attempt}/submit', [TestAttemptController::class, 'submit']);
         Route::get('attempts/{attempt}/result', [TestAttemptController::class, 'result']);
 
-        Route::middleware('role:teacher,admin')->group(function () {
+        // role: chốt quyền theo role trong DB (nguồn chuẩn). token:teacher: chặn token
+        // học sinh (chỉ có ability 'student') ở cấp phạm vi token — tách bạch 2 loại token.
+        Route::middleware(['role:teacher,admin', 'token:teacher'])->group(function () {
             Route::get('dashboard', [DashboardController::class, 'index']);
 
             Route::get('media/class-covers', [MediaController::class, 'classCovers']);

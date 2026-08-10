@@ -11,6 +11,9 @@ class TestAttempt extends Model
 {
     use HasFactory;
 
+    /** Số lần được phép rời tab; vượt quá (thoát lần thứ LIMIT+1) → tự nộp bài. */
+    public const TAB_EXIT_LIMIT = 3;
+
     protected $fillable = [
         'user_id',
         'test_id',
@@ -21,6 +24,7 @@ class TestAttempt extends Model
         'total_score',
         'correct_count',
         'question_count',
+        'tab_exit_count',
         'attempt_count',
         'last_attempted_at',
         'status',
@@ -34,6 +38,21 @@ class TestAttempt extends Model
             'last_attempted_at' => 'datetime',
             'total_score' => 'decimal:2',
         ];
+    }
+
+    /**
+     * Hạn nộp = started_at + thời lượng đề. `null` nếu đề không giới hạn thời gian
+     * (duration_minutes = 0). Cần quan hệ `test` đã nạp.
+     */
+    public function deadlineAt(): ?\Illuminate\Support\Carbon
+    {
+        if (! $this->started_at) {
+            return null;
+        }
+
+        $duration = (int) $this->test->duration_minutes;
+
+        return $duration > 0 ? $this->started_at->clone()->addMinutes($duration) : null;
     }
 
     public function user(): BelongsTo
