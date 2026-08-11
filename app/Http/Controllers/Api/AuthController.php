@@ -19,8 +19,11 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    /** Số lần đăng nhập sai tối đa trước khi khoá tạm (spec: 5 / 60 giây). */
-    private const MAX_LOGIN_ATTEMPTS = 5;
+    /** Số lần đăng nhập sai tối đa trước khi khoá tạm — đọc từ cấu hình (mặc định 5 / 60 giây). */
+    private function maxLoginAttempts(): int
+    {
+        return (int) setting('security.max_login_attempts', 5);
+    }
 
     private const LOGIN_DECAY_SECONDS = 60;
 
@@ -29,7 +32,7 @@ class AuthController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'min:'.(int) setting('security.password_min', 8), 'confirmed'],
         ]);
 
         $user = User::create([
@@ -49,7 +52,7 @@ class AuthController extends Controller
     {
         $key = $request->throttleKey();
 
-        if (RateLimiter::tooManyAttempts($key, self::MAX_LOGIN_ATTEMPTS)) {
+        if (RateLimiter::tooManyAttempts($key, $this->maxLoginAttempts())) {
             $seconds = RateLimiter::availableIn($key);
 
             return response()->json([

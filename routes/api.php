@@ -2,30 +2,32 @@
 
 use App\Http\Controllers\Api\AdminAttemptController;
 use App\Http\Controllers\Api\AdminTestController;
-use App\Http\Controllers\Api\TestCategoryController;
-use App\Http\Controllers\Api\TestImportController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CardController;
 use App\Http\Controllers\Api\ClassroomController;
 use App\Http\Controllers\Api\ClassSessionController;
 use App\Http\Controllers\Api\ClassStudentController;
-use App\Http\Controllers\Api\CardController;
 use App\Http\Controllers\Api\ContentController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DeckController;
 use App\Http\Controllers\Api\DictionaryController;
 use App\Http\Controllers\Api\DocumentAttachmentController;
 use App\Http\Controllers\Api\DocumentCategoryController;
 use App\Http\Controllers\Api\DocumentController;
-use App\Http\Controllers\Api\StudentDocumentController;
-use App\Http\Controllers\Api\ReportController;
-use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\DeckController;
 use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SessionItemController;
+use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentDeckController;
+use App\Http\Controllers\Api\StudentDocumentController;
 use App\Http\Controllers\Api\TestAttemptController;
+use App\Http\Controllers\Api\TestCategoryController;
 use App\Http\Controllers\Api\TestController;
+use App\Http\Controllers\Api\TestImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -34,9 +36,16 @@ Route::prefix('v1')->group(function () {
     Route::post('auth/forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('auth/reset-password', [AuthController::class, 'resetPassword']);
 
-    Route::middleware('auth:sanctum')->group(function () {
+    // Thương hiệu công khai (logo, favicon, tiêu đề, màu) — frontend gọi lúc khởi động.
+    Route::get('public/branding', [SettingController::class, 'publicBranding']);
+
+    Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
         Route::post('auth/logout', [AuthController::class, 'logout']);
+
+        // Lớp của em — khu học sinh
+        Route::get('me/classrooms', [StudentClassroomController::class, 'index']);
+        Route::get('classrooms/{classroom}/roadmap', [StudentClassroomController::class, 'roadmap']);
 
         // Tài liệu & Bài giảng — khu học sinh
         Route::get('library/documents', [StudentDocumentController::class, 'library']);
@@ -61,6 +70,18 @@ Route::prefix('v1')->group(function () {
         Route::delete('attempts/{attempt}/answers/{question}/audio', [TestAttemptController::class, 'deleteAudio']);
         Route::post('attempts/{attempt}/submit', [TestAttemptController::class, 'submit']);
         Route::get('attempts/{attempt}/result', [TestAttemptController::class, 'result']);
+
+        // Cài đặt hệ thống — CHỈ super admin (không phải mọi admin/teacher).
+        Route::middleware(['superadmin', 'token:teacher'])->prefix('admin')->group(function () {
+            Route::get('settings', [SettingController::class, 'index']);
+            Route::put('settings', [SettingController::class, 'update']);
+            Route::post('settings/reset', [SettingController::class, 'reset']);
+            Route::post('settings/upload', [SettingController::class, 'upload']);
+            Route::delete('settings/file', [SettingController::class, 'deleteFile']);
+            Route::get('settings/changes', [SettingController::class, 'changes']);
+            Route::post('settings/changes/{change}/revert', [SettingController::class, 'revert']);
+            Route::post('settings/mail/test', [SettingController::class, 'mailTest']);
+        });
 
         // role: chốt quyền theo role trong DB (nguồn chuẩn). token:teacher: chặn token
         // học sinh (chỉ có ability 'student') ở cấp phạm vi token — tách bạch 2 loại token.

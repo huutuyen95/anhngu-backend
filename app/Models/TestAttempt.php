@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 class TestAttempt extends Model
 {
@@ -25,6 +26,7 @@ class TestAttempt extends Model
         'correct_count',
         'question_count',
         'tab_exit_count',
+        'config_snapshot',
         'attempt_count',
         'last_attempted_at',
         'status',
@@ -37,14 +39,23 @@ class TestAttempt extends Model
             'submitted_at' => 'datetime',
             'last_attempted_at' => 'datetime',
             'total_score' => 'decimal:2',
+            'config_snapshot' => 'array',
         ];
+    }
+
+    /** Lấy 1 giá trị trong snapshot cấu hình lúc bắt đầu, fallback về cấu hình hiện hành. */
+    public function configValue(string $key, mixed $default = null): mixed
+    {
+        $snapshot = $this->config_snapshot ?? [];
+
+        return $snapshot[$key] ?? setting($key, $default);
     }
 
     /**
      * Hạn nộp = started_at + thời lượng đề. `null` nếu đề không giới hạn thời gian
      * (duration_minutes = 0). Cần quan hệ `test` đã nạp.
      */
-    public function deadlineAt(): ?\Illuminate\Support\Carbon
+    public function deadlineAt(): ?Carbon
     {
         if (! $this->started_at) {
             return null;

@@ -16,7 +16,8 @@ class DocumentAttachmentController extends Controller
 
     public function store(Request $request, Document $document): JsonResponse
     {
-        $request->validate(['file' => ['required', 'file', 'max:51200']]); // 50MB
+        $maxKb = (int) setting('storage.max_file_mb', 50) * 1024;
+        $request->validate(['file' => ['required', 'file', 'max:'.$maxKb]]);
         $file = $request->file('file');
 
         if ($file->getSize() > $this->docs->remainingBytes()) {

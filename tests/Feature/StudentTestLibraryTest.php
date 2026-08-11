@@ -7,6 +7,7 @@ use App\Models\Classroom;
 use App\Models\Test;
 use App\Models\TestCategory;
 use App\Models\User;
+use App\Services\SettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -290,6 +291,9 @@ class StudentTestLibraryTest extends TestCase
 
             return $count;
         };
+
+        // Nạp sẵn cache settings (middleware bảo trì đọc 1 lần, chi phí O(1) không phải N+1).
+        app(SettingService::class)->all();
 
         foreach (range(1, 3) as $i) {
             $category = TestCategory::create(['name' => "Unit {$i}", 'classroom_id' => $classroom->id, 'order' => $i]);

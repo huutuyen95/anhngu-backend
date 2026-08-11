@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Laravel\Sanctum\NewAccessToken;
 
 class User extends Authenticatable
 {
@@ -32,6 +33,7 @@ class User extends Authenticatable
         'phone',
         'note',
         'is_active',
+        'is_super_admin',
     ];
 
     /**
@@ -56,7 +58,13 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'is_active' => 'boolean',
+            'is_super_admin' => 'boolean',
         ];
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return (bool) $this->is_super_admin;
     }
 
     public function isTeacher(): bool
@@ -97,7 +105,7 @@ class User extends Authenticatable
     /**
      * Cấp một token đã gắn đúng loại + phạm vi cho role của user.
      */
-    public function issueRoleToken(): \Laravel\Sanctum\NewAccessToken
+    public function issueRoleToken(): NewAccessToken
     {
         return $this->createToken($this->tokenType(), $this->tokenAbilities());
     }

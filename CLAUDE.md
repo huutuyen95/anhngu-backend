@@ -48,6 +48,13 @@ Sửa file code trong `backend/` là container thấy ngay (bind-mount).
   Đề xếp theo thư mục: `test_categories` (`tests.category_id`).
 - **Flashcard**: `decks` → `cards` → `card_progress`.
 - **Nhiệm vụ**: `missions` (polymorphic). **Log hoạt động**: `activity_logs` (dựng báo cáo).
+- **Cài đặt hệ thống**: `settings(key,value,type,group)` key–value (chỉ lưu giá trị khác default) +
+  `setting_changes` (lịch sử + hoàn tác). Nguồn sự thật danh sách key: `config/appsettings.php`.
+  Đọc mọi nơi qua helper `setting('exam.leave_limit', 3)` (cache 1 mảng, xoá khi lưu) hoặc
+  `App\Services\SettingService`. Chi tiết: `docs/PROMPT-MODULE-CAI-DAT.md`. Chỉ **super admin**
+  (`users.is_super_admin = true`) vào được (`/api/v1/admin/settings`, middleware `superadmin`) —
+  admin thường cũng bị chặn. Thương hiệu công khai ở `GET /public/branding`.
+  Middleware `maintenance` (`system.maintenance`) chặn khu học sinh, admin/teacher vẫn vào.
 
 ### Loại câu hỏi (chốt theo `App\Enums\QuestionType` — KHÔNG tự thêm dạng khác)
 
