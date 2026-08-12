@@ -84,25 +84,45 @@ class AttemptGradingService
                 );
             }
 
-            $totalScore = (float) $attempt->answers()->sum('score');
             $correctCount = $attempt->answers()->where('is_correct', true)->count();
 
-            $survived = $this->gradingService->reconcileBestAttempt($attempt, [
+            // Quy về thang điểm của đề, GIỐNG chấm tự động. Trước đây cộng thô
+            // attempt_answers.score (editor luôn lưu question.score = 1) nên writing
+            // đủ điểm vẫn ra 1 trong khi đề để thang 10.
+            $totalScore = $this->scaleToTestScore($attempt);
+
+            // Chấm tay thì luôn giữ lượt vừa chấm và xoá lượt cũ, KHÔNG so điểm: điểm
+            // lượt cũ có thể còn ở thang cũ nên so là vô nghĩa. Điểm cuối cùng của học
+            // viên = điểm cô chấm gần nhất.
+            $this->gradingService->reconcileBestAttempt($attempt, [
                 'total_score' => $totalScore,
                 'correct_count' => $correctCount,
                 'question_count' => $attempt->question_count,
-            ], 'graded');
+            ], 'graded', keepLatest: true);
 
-            // Nếu lượt vừa chấm bị dedup xoá (đã có lượt graded/submitted điểm cao hơn), trả về
-            // lượt hiện đang là best cho (user, test) để FE vẫn hiển thị được kết quả cuối cùng.
-            $final = $survived
-                ? $attempt
-                : TestAttempt::where('user_id', $attempt->user_id)
-                    ->where('test_id', $attempt->test_id)
-                    ->whereIn('status', ['submitted', 'graded'])
-                    ->firstOrFail();
-
-            return $this->show($final);
+            return $this->show($attempt);
         });
+    }
+
+    /**
+     * Tổng điểm sau khi chấm tay, quy về thang điểm của đề:
+     *   (tổng điểm câu đã chấm / tổng điểm tối đa của đề) × test.total_score
+     */
+    private function scaleToTestScore(TestAttempt $attempt): float
+    {
+        $test = $attempt->test()->with('parts.sections.questions')->firstOrFail();
+
+        $maxScore = (float) $test->parts
+            ->flatMap(fn ($part) => $part->sections)
+            ->flatMap(fn ($section) => $section->questions)
+            ->sum('score');
+
+        if ($maxScore <= 0) {
+            return 0.0;
+        }
+
+        $rawScore = (float) $attempt->answers()->sum('score');
+
+        return round($rawScore / $maxScore * (float) $test->total_score, 2);
     }
 }

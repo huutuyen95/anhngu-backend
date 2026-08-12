@@ -59,7 +59,10 @@ class TestAttemptController extends Controller
         abort_if($attempt->user_id !== $request->user()->id, 403);
 
         $data = $request->validate([
-            'answers' => ['required', 'array'],
+            // `present` chứ không phải `required`: học viên chưa làm câu nào thì mảng
+            // rỗng vẫn là payload hợp lệ. Dùng `required` khiến lượt nộp lúc hết giờ
+            // mà bỏ trắng cả bài bị 422 và không nộp được.
+            'answers' => ['present', 'array'],
             'answers.*.question_id' => ['required', 'integer', 'exists:questions,id'],
             'answers.*.question_option_id' => ['nullable', 'integer', 'exists:question_options,id'],
             'answers.*.answer_text' => ['nullable', 'string'],
@@ -114,7 +117,7 @@ class TestAttemptController extends Controller
     {
         abort_if($attempt->user_id !== $request->user()->id, 403);
 
-        $attempt->load('answers');
+        $attempt->load('answers.gradedBy:id,name');
 
         $test = $attempt->test()
             ->with([
@@ -127,9 +130,13 @@ class TestAttemptController extends Controller
 
         return response()->json([
             'id' => $attempt->id,
+            // `status` + phần chấm tay bên dưới để màn kết quả của học viên biết bài
+            // writing đã được cô chấm hay còn chờ, và hiện điểm/nhận xét của cô.
+            'status' => $attempt->status,
             'total_score' => (float) $attempt->total_score,
             'correct_count' => $attempt->correct_count,
             'question_count' => $attempt->question_count,
+            'started_at' => $attempt->started_at,
             'submitted_at' => $attempt->submitted_at,
             'test' => new TestDetailResource($test, revealAnswers: true),
             'answers' => $attempt->answers->map(fn (AttemptAnswer $answer) => [
@@ -137,6 +144,10 @@ class TestAttemptController extends Controller
                 'question_option_id' => $answer->question_option_id,
                 'answer_text' => $answer->answer_text,
                 'is_correct' => $answer->is_correct,
+                'score' => (float) $answer->score,
+                'feedback' => $answer->feedback,
+                'graded_by' => $answer->gradedBy?->name,
+                'graded_at' => $answer->graded_at,
             ])->values(),
         ]);
     }

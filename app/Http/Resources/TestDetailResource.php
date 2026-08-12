@@ -62,7 +62,9 @@ class TestDetailResource extends JsonResource
                         'audio_url' => $question->audio_url,
                         'images' => $question->images,
                         'record_limit_seconds' => $question->record_limit_seconds,
-                        ...($this->revealAnswers ? ['explanation' => $question->explanation] : []),
+                        // `score` = điểm tối đa của câu, chỉ lộ ở màn kết quả — màn kết quả
+                        // cần nó để hiện "cô chấm x/y điểm" cho câu writing.
+                        ...($this->revealAnswers ? ['explanation' => $question->explanation, 'score' => (float) $question->score] : []),
                         'options' => $question->options->map(fn ($option) => [
                             'id' => $option->id,
                             'label' => $option->label,
