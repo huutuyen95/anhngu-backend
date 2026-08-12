@@ -157,9 +157,16 @@ class TestGradingService
      *
      * Public vì AttemptGradingService cũng gọi lại hàm này sau khi giáo viên chấm xong writing
      * (lúc đó điểm mới được finalize, trước đó bị TestGradingService::submit() bỏ qua bước này).
+     *
+     * $keepLatest = true: luôn giữ $attempt và xoá lượt cũ, không so điểm — dùng cho
+     * đường chấm tay, nơi điểm lượt cũ có thể còn ở thang điểm cũ nên so là vô nghĩa.
      */
-    public function reconcileBestAttempt(TestAttempt $attempt, array $graded, string $finalStatus = 'submitted'): bool
-    {
+    public function reconcileBestAttempt(
+        TestAttempt $attempt,
+        array $graded,
+        string $finalStatus = 'submitted',
+        bool $keepLatest = false,
+    ): bool {
         $previousBest = TestAttempt::whereIn('status', ['submitted', 'graded'])
             ->where('user_id', $attempt->user_id)
             ->where('test_id', $attempt->test_id)
@@ -167,7 +174,7 @@ class TestGradingService
             ->lockForUpdate()
             ->first();
 
-        if (! $previousBest || $graded['total_score'] > (float) $previousBest->total_score) {
+        if (! $previousBest || $keepLatest || $graded['total_score'] > (float) $previousBest->total_score) {
             $attemptCount = $previousBest ? $previousBest->attempt_count + 1 : $attempt->attempt_count;
 
             if ($previousBest) {
