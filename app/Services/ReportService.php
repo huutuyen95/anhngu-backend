@@ -11,7 +11,8 @@ use Illuminate\Support\Carbon;
 class ReportService
 {
     /**
-     * Báo cáo của 1 lớp theo kỳ. Chỉ tính bài ĐƯỢC GIAO (attempt gắn classroom_id).
+     * Báo cáo của 1 lớp theo kỳ. Chỉ tính bài ĐƯỢC GIAO (scope `assigned()` = attempt có
+     * mission_id); lượt tự luyện ở Thư viện không bao giờ lọt vào đây.
      * Bài chờ chấm (total_score null) KHÔNG tính vào điểm TB — trả kèm pending_count.
      *
      * @return array<string, mixed>
@@ -24,8 +25,8 @@ class ReportService
         $from = now()->subDays($days);
 
         $graded = TestAttempt::where('classroom_id', $classroom->id)
-            ->where('status', 'submitted')
-            ->whereNotNull('total_score')
+            ->assigned()
+            ->scored()
             ->where('submitted_at', '>=', $from);
 
         $attemptsCount = (clone $graded)->count();
@@ -38,7 +39,7 @@ class ReportService
             ->count();
 
         $pending = TestAttempt::where('classroom_id', $classroom->id)
-            ->where('status', 'submitted')->whereNull('total_score')->count();
+            ->assigned()->where('status', 'pending_review')->count();
 
         return [
             'stats' => [
@@ -59,6 +60,7 @@ class ReportService
     private function studySeconds(int $classId, Carbon $from): int
     {
         return (int) TestAttempt::where('classroom_id', $classId)
+            ->assigned()
             ->whereNotNull('started_at')->whereNotNull('submitted_at')
             ->where('submitted_at', '>=', $from)
             ->get(['started_at', 'submitted_at'])
@@ -76,7 +78,7 @@ class ReportService
             $start = now()->subWeeks($i)->startOfWeek();
             $end = now()->subWeeks($i)->endOfWeek();
             $avg = (float) (TestAttempt::where('classroom_id', $classId)
-                ->where('status', 'submitted')->whereNotNull('total_score')
+                ->assigned()->scored()
                 ->whereBetween('submitted_at', [$start, $end])
                 ->avg('total_score') ?? 0);
             $out[] = ['week' => $start->format('d/m'), 'score' => round($avg, 1)];
@@ -91,7 +93,7 @@ class ReportService
     private function scoreBuckets(int $classId, Carbon $from): array
     {
         $scores = TestAttempt::where('classroom_id', $classId)
-            ->where('status', 'submitted')->whereNotNull('total_score')
+            ->assigned()->scored()
             ->where('submitted_at', '>=', $from)
             ->pluck('total_score');
 
@@ -127,13 +129,13 @@ class ReportService
      */
     private function byStudent(Classroom $classroom, Carbon $from): array
     {
-        return $classroom->students()->orderBy('name')->get()->map(function ($student) use ($classroom, $from) {
+        return $classroom->students()->orderBy('name')->get()->map(function ($student) use ($classroom) {
             $missions = Mission::where('classroom_id', $classroom->id)->where('user_id', $student->id);
             $total = (clone $missions)->count();
             $done = (clone $missions)->where('status', 'done')->count();
 
             $attempts = TestAttempt::where('classroom_id', $classroom->id)->where('user_id', $student->id)
-                ->where('status', 'submitted')->whereNotNull('total_score');
+                ->assigned()->scored();
 
             $attended = SessionAttendance::where('user_id', $student->id)
                 ->whereIn('status', ['on_time', 'late'])
@@ -141,7 +143,7 @@ class ReportService
                 ->count();
 
             $lastWeek = (float) (TestAttempt::where('classroom_id', $classroom->id)->where('user_id', $student->id)
-                ->where('status', 'submitted')->whereNotNull('total_score')
+                ->assigned()->scored()
                 ->whereBetween('submitted_at', [now()->subWeek()->startOfWeek(), now()->subWeek()->endOfWeek()])
                 ->avg('total_score') ?? 0);
 

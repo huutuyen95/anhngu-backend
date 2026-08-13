@@ -9,52 +9,31 @@ use App\Models\Question;
 use App\Models\Test;
 use App\Models\TestAttempt;
 use App\Services\AttemptAudioService;
+use App\Services\AttemptStartService;
 use App\Services\TestGradingService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class TestAttemptController extends Controller
 {
     public function __construct(
         private readonly TestGradingService $gradingService,
         private readonly AttemptAudioService $audioService,
+        private readonly AttemptStartService $startService,
     ) {}
 
+    /**
+     * Mở lượt làm bài. `mission_id` (tuỳ chọn) = vào từ lớp học, làm bài cô giao; không có =
+     * tự luyện trong Thư viện. Hai nguồn tách hẳn nhau — xem AttemptStartService.
+     */
     public function start(Request $request, Test $test)
     {
         abort_unless($test->is_published, 404);
 
-        $attempt = DB::transaction(function () use ($request, $test) {
-            // Dọn attempt in_progress cũ chưa nộp (nếu có) trước khi tạo lượt mới.
-            $stale = TestAttempt::where('user_id', $request->user()->id)
-                ->where('test_id', $test->id)
-                ->where('status', 'in_progress')
-                ->first();
+        $data = $request->validate([
+            'mission_id' => ['nullable', 'integer'],
+        ]);
 
-            if ($stale) {
-                $stale->answers()->delete();
-                $stale->delete();
-            }
-
-            return TestAttempt::create([
-                'user_id' => $request->user()->id,
-                'test_id' => $test->id,
-                'status' => 'in_progress',
-                'started_at' => now(),
-                'question_count' => $test->questionCount(),
-                // Chụp cấu hình lúc bắt đầu — đổi cấu hình giữa chừng không ảnh hưởng lượt này.
-                'config_snapshot' => [
-                    'exam.leave_limit' => (int) setting('exam.leave_limit', 3),
-                    'exam.leave_action' => setting('exam.leave_action', 'warn'),
-                    'exam.autosubmit_on_timeout' => (bool) setting('exam.autosubmit_on_timeout', true),
-                    'exam.block_copy' => (bool) setting('exam.block_copy', true),
-                    'exam.disable_dictionary' => (bool) setting('exam.disable_dictionary', true),
-                    'grading.method' => setting('grading.method', 'scale_10_even'),
-                    'grading.decimals' => (int) setting('grading.decimals', 1),
-                    'grading.pass_score' => (float) setting('grading.pass_score', 5.0),
-                ],
-            ]);
-        });
+        $attempt = $this->startService->start($request->user(), $test, $data['mission_id'] ?? null);
 
         $deadline = $attempt->started_at->clone()->addMinutes($test->duration_minutes);
 
@@ -62,6 +41,8 @@ class TestAttemptController extends Controller
             'attempt_id' => $attempt->id,
             'started_at' => $attempt->started_at,
             'deadline' => $deadline,
+            'mission_id' => $attempt->mission_id,
+            'source' => $attempt->source,
         ]);
     }
 
@@ -123,8 +104,45 @@ class TestAttemptController extends Controller
 
         $result = $this->gradingService->submit($attempt);
         $result['grading'] = $this->gradingConfig($attempt);
+        // Màn kết quả vẽ ngay từ payload này (lưu sessionStorage) trước khi GET /result về,
+        // nên nó cũng phải biết lượt vừa nộp thuộc nguồn nào.
+        $result['source'] = $attempt->source;
+        $result['mission'] = $this->missionContext($attempt);
 
         return response()->json($result);
+    }
+
+    /**
+     * Ngữ cảnh của lượt làm để FE biết đang ở màn nào mà vẽ cho khác nhau: bài cô giao
+     * trong lớp (kèm lớp/buổi/hạn nộp/số lượt còn) hay em tự luyện ở Thư viện.
+     *
+     * `null` = tự luyện. Hai luồng dùng chung component nên thiếu khối này thì màn kết quả
+     * của lớp lại hiện nút "Về Nhiệm vụ" / "Làm lại từ đầu" của Thư viện.
+     */
+    private function missionContext(TestAttempt $attempt): ?array
+    {
+        if (! $attempt->mission_id) {
+            return null;
+        }
+
+        $mission = $attempt->mission()->with(['classroom:id,name', 'classSession:id,title,order'])->first();
+
+        if (! $mission) {
+            return null;
+        }
+
+        $allowed = max(1, (int) ($mission->attempts_allowed ?? 1));
+
+        return [
+            'id' => $mission->id,
+            'classroom_id' => $mission->classroom_id,
+            'classroom_name' => $mission->classroom?->name,
+            'session_title' => $mission->classSession?->title,
+            'session_order' => $mission->classSession?->order,
+            'due_date' => $mission->due_date?->toDateString(),
+            'attempts_allowed' => $allowed,
+            'attempts_used' => $mission->attemptsUsed(),
+        ];
     }
 
     /** Cấu hình hiển thị điểm (số thập phân, điểm đạt) — theo snapshot lúc bắt đầu. */
@@ -156,6 +174,8 @@ class TestAttemptController extends Controller
             // `status` + phần chấm tay bên dưới để màn kết quả của học viên biết bài
             // writing đã được cô chấm hay còn chờ, và hiện điểm/nhận xét của cô.
             'status' => $attempt->status,
+            'source' => $attempt->source,
+            'mission' => $this->missionContext($attempt),
             'total_score' => (float) $attempt->total_score,
             'correct_count' => $attempt->correct_count,
             'question_count' => $attempt->question_count,
@@ -189,6 +209,8 @@ class TestAttemptController extends Controller
         return response()->json([
             'id' => $attempt->id,
             'status' => $attempt->status,
+            'source' => $attempt->source,
+            'mission' => $this->missionContext($attempt),
             'started_at' => $attempt->started_at,
             'deadline' => $attempt->deadlineAt(),
             'tab_exit_count' => $attempt->tab_exit_count,

@@ -51,6 +51,8 @@ class TestGradingService
                 $status = 'submitted';
             }
 
+            $this->completeMission($attempt);
+
             return [
                 'total_score' => $graded['total_score'],
                 'correct_count' => $graded['correct_count'],
@@ -134,6 +136,32 @@ class TestGradingService
     }
 
     /**
+     * Nộp bài giao xong → đóng nhiệm vụ tương ứng (kể cả khi còn chờ cô chấm: với học viên thì
+     * nhiệm vụ đã hoàn thành). Lượt tự luyện ở thư viện KHÔNG có mission nên không đụng gì.
+     *
+     * Trước đây không ai cập nhật missions.status cho đề thi (chỉ deck/document có), khiến báo
+     * cáo lớp đếm "bài hoàn thành" theo missions luôn thiếu, lệch với % tiến độ trên roadmap.
+     */
+    private function completeMission(TestAttempt $attempt): void
+    {
+        if (! $attempt->mission_id) {
+            return;
+        }
+
+        $mission = $attempt->mission()->first();
+
+        if (! $mission || $mission->status === 'done') {
+            return;
+        }
+
+        $mission->update(['status' => 'done', 'completed_at' => now()]);
+
+        if ($mission->classroom) {
+            app(ClassroomStatsService::class)->forget($mission->classroom);
+        }
+    }
+
+    /**
      * Đề có câu writing chưa chấm: lưu lại điểm-tạm (chỉ từ câu tự chấm) + status=pending_review,
      * KHÔNG đối chiếu/xoá so với các lượt khác — chờ giáo viên chấm xong mới finalize
      * qua reconcileBestAttempt().
@@ -167,9 +195,10 @@ class TestGradingService
         string $finalStatus = 'submitted',
         bool $keepLatest = false,
     ): bool {
+        // CHỈ so trong cùng nguồn (cùng mission, hoặc cùng là lượt tự luyện). Trước đây so
+        // trên toàn bộ (user, test) nên lượt tự luyện điểm cao ở thư viện xoá mất bài cô giao.
         $previousBest = TestAttempt::whereIn('status', ['submitted', 'graded'])
-            ->where('user_id', $attempt->user_id)
-            ->where('test_id', $attempt->test_id)
+            ->sameScope($attempt)
             ->where('id', '!=', $attempt->id)
             ->lockForUpdate()
             ->first();

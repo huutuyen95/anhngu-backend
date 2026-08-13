@@ -35,10 +35,10 @@ class ClassroomStatsService
     {
         $studentsCount = $classroom->students()->count();
 
-        // Chỉ tính bài ĐƯỢC GIAO (attempt gắn classroom_id), không tính tự luyện (classroom_id null).
+        // Chỉ tính bài ĐƯỢC GIAO (`assigned()` = attempt có mission_id), không tính tự luyện.
         $graded = TestAttempt::where('classroom_id', $classroom->id)
-            ->where('status', 'submitted')
-            ->whereNotNull('total_score');
+            ->assigned()
+            ->scored();
 
         $avgScore = (float) ($graded->avg('total_score') ?? 0);
 
@@ -49,10 +49,10 @@ class ClassroomStatsService
 
         $openMissions = (clone $missions)->where('status', 'todo')->count();
 
-        // "Chờ chấm": bài đã nộp nhưng chưa có điểm (writing chờ cô chấm).
+        // "Chờ chấm": bài writing/speaking đã nộp, đang đợi cô chấm tay.
         $pendingReview = TestAttempt::where('classroom_id', $classroom->id)
-            ->where('status', 'submitted')
-            ->whereNull('total_score')
+            ->assigned()
+            ->where('status', 'pending_review')
             ->count();
 
         $lastSession = $classroom->sessions()

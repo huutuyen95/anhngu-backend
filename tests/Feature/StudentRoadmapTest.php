@@ -97,9 +97,11 @@ class StudentRoadmapTest extends TestCase
     {
         $session = $this->class->sessions()->create(['title' => 'B1', 'order' => 1, 'is_visible' => true]);
         $test = $this->makeTest();
-        $this->assignMission($session->id, $test);
+        $mission = $this->assignMission($session->id, $test);
+        // Lượt phải gắn mission thì mới là "bài cô giao" — lượt tự luyện cùng đề không tính.
         $attempt = TestAttempt::create([
             'user_id' => $this->student->id, 'test_id' => $test->id, 'classroom_id' => $this->class->id,
+            'mission_id' => $mission->id, 'source' => 'assignment',
             'status' => 'in_progress', 'started_at' => now(), 'question_count' => 5,
         ]);
 

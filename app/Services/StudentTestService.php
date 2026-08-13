@@ -142,12 +142,18 @@ class StudentTestService
      */
     private function whereBucket(Builder $query, string $bucket, User $student): void
     {
+        // `whereNull('mission_id')`: bộ lọc trạng thái ở Thư viện chỉ nhìn lượt tự luyện,
+        // giống hệt attemptsOf() — nếu không, đề đã làm trong lớp sẽ biến mất khỏi "Chưa làm".
         $mine = fn (array $statuses) => fn ($q) => $q
             ->where('user_id', $student->id)
+            ->whereNull('mission_id')
             ->whereIn('status', $statuses);
 
         match ($bucket) {
-            'todo' => $query->whereDoesntHave('attempts', fn ($q) => $q->where('user_id', $student->id)),
+            'todo' => $query->whereDoesntHave(
+                'attempts',
+                fn ($q) => $q->where('user_id', $student->id)->whereNull('mission_id')
+            ),
             'doing' => $query->whereHas('attempts', $mine(['in_progress'])),
             'grading' => $query->whereHas('attempts', $mine(['pending_review']))
                 ->whereDoesntHave('attempts', $mine(['in_progress'])),
@@ -216,6 +222,9 @@ class StudentTestService
 
         return TestAttempt::query()
             ->where('user_id', $student->id)
+            // CHỈ lượt tự luyện: bài cô giao trong lớp có nguồn riêng, không được hiện thành
+            // "đã làm" / điểm cao nhất trên card ở Thư viện.
+            ->whereNull('mission_id')
             ->whereIn('status', array_keys(self::BUCKET_OF_STATUS))
             ->whereIn('test_id', $testIds)
             // Tiến độ "câu 12/40" của lượt đang làm dở — chỉ đếm câu đã thực sự trả lời.
