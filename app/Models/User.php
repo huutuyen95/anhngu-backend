@@ -31,6 +31,11 @@ class User extends Authenticatable
         'role',
         'avatar_url',
         'phone',
+        'birthday',
+        'gender',
+        'address',
+        'facebook_url',
+        'password_changed_at',
         'note',
         'is_active',
         'is_super_admin',
@@ -59,6 +64,8 @@ class User extends Authenticatable
             'role' => UserRole::class,
             'is_active' => 'boolean',
             'is_super_admin' => 'boolean',
+            'birthday' => 'date',
+            'password_changed_at' => 'datetime',
         ];
     }
 

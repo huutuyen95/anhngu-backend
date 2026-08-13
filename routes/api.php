@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\DocumentAttachmentController;
 use App\Http\Controllers\Api\DocumentCategoryController;
 use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\MediaController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SessionItemController;
 use App\Http\Controllers\Api\SettingController;
@@ -42,6 +43,14 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
         Route::get('auth/me', [AuthController::class, 'me']);
         Route::post('auth/logout', [AuthController::class, 'logout']);
+
+        // Hồ sơ cá nhân (học sinh + giáo viên đều có)
+        Route::get('me', [ProfileController::class, 'show']);
+        Route::put('me', [ProfileController::class, 'update']);
+        Route::post('me/avatar', [ProfileController::class, 'uploadAvatar']);
+        Route::delete('me/avatar', [ProfileController::class, 'deleteAvatar']);
+        Route::put('me/password', [ProfileController::class, 'updatePassword']);
+        Route::post('me/logout-others', [ProfileController::class, 'logoutOthers']);
 
         // Lớp của em — khu học sinh
         Route::get('me/classrooms', [StudentClassroomController::class, 'index']);
