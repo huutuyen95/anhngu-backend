@@ -104,8 +104,45 @@ class TestAttemptController extends Controller
 
         $result = $this->gradingService->submit($attempt);
         $result['grading'] = $this->gradingConfig($attempt);
+        // Màn kết quả vẽ ngay từ payload này (lưu sessionStorage) trước khi GET /result về,
+        // nên nó cũng phải biết lượt vừa nộp thuộc nguồn nào.
+        $result['source'] = $attempt->source;
+        $result['mission'] = $this->missionContext($attempt);
 
         return response()->json($result);
+    }
+
+    /**
+     * Ngữ cảnh của lượt làm để FE biết đang ở màn nào mà vẽ cho khác nhau: bài cô giao
+     * trong lớp (kèm lớp/buổi/hạn nộp/số lượt còn) hay em tự luyện ở Thư viện.
+     *
+     * `null` = tự luyện. Hai luồng dùng chung component nên thiếu khối này thì màn kết quả
+     * của lớp lại hiện nút "Về Nhiệm vụ" / "Làm lại từ đầu" của Thư viện.
+     */
+    private function missionContext(TestAttempt $attempt): ?array
+    {
+        if (! $attempt->mission_id) {
+            return null;
+        }
+
+        $mission = $attempt->mission()->with(['classroom:id,name', 'classSession:id,title,order'])->first();
+
+        if (! $mission) {
+            return null;
+        }
+
+        $allowed = max(1, (int) ($mission->attempts_allowed ?? 1));
+
+        return [
+            'id' => $mission->id,
+            'classroom_id' => $mission->classroom_id,
+            'classroom_name' => $mission->classroom?->name,
+            'session_title' => $mission->classSession?->title,
+            'session_order' => $mission->classSession?->order,
+            'due_date' => $mission->due_date?->toDateString(),
+            'attempts_allowed' => $allowed,
+            'attempts_used' => $mission->attemptsUsed(),
+        ];
     }
 
     /** Cấu hình hiển thị điểm (số thập phân, điểm đạt) — theo snapshot lúc bắt đầu. */
@@ -137,6 +174,8 @@ class TestAttemptController extends Controller
             // `status` + phần chấm tay bên dưới để màn kết quả của học viên biết bài
             // writing đã được cô chấm hay còn chờ, và hiện điểm/nhận xét của cô.
             'status' => $attempt->status,
+            'source' => $attempt->source,
+            'mission' => $this->missionContext($attempt),
             'total_score' => (float) $attempt->total_score,
             'correct_count' => $attempt->correct_count,
             'question_count' => $attempt->question_count,
@@ -170,6 +209,8 @@ class TestAttemptController extends Controller
         return response()->json([
             'id' => $attempt->id,
             'status' => $attempt->status,
+            'source' => $attempt->source,
+            'mission' => $this->missionContext($attempt),
             'started_at' => $attempt->started_at,
             'deadline' => $attempt->deadlineAt(),
             'tab_exit_count' => $attempt->tab_exit_count,

@@ -35,6 +35,28 @@ class Mission extends Model
         ];
     }
 
+    /** Lượt đã nộp của nhiệm vụ — không còn làm tiếp được, tính vào số lần đã dùng. */
+    private const USED_ATTEMPT_STATUSES = ['pending_review', 'submitted', 'graded'];
+
+    /**
+     * Số lần học viên đã nộp bài cho nhiệm vụ này (đối chiếu với `attempts_allowed`).
+     *
+     * Cộng `attempt_count` chứ không đếm dòng: dedup lượt-điểm-cao-nhất gộp nhiều lần nộp
+     * vào một dòng, còn lượt `pending_review` thì không bị gộp nên nằm ở nhiều dòng.
+     */
+    public function attemptsUsed(): int
+    {
+        return (int) TestAttempt::where('mission_id', $this->id)
+            ->whereIn('status', self::USED_ATTEMPT_STATUSES)
+            ->sum('attempt_count');
+    }
+
+    /** Còn lượt để mở bài không. Bài giao mặc định chỉ 1 lượt. */
+    public function hasAttemptsLeft(): bool
+    {
+        return $this->attemptsUsed() < max(1, (int) ($this->attempts_allowed ?? 1));
+    }
+
     public function classroom(): BelongsTo
     {
         return $this->belongsTo(Classroom::class);

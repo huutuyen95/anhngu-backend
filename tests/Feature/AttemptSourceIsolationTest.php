@@ -308,6 +308,50 @@ class AttemptSourceIsolationTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_attempt_payloads_carry_the_origin_so_screens_can_differ(): void
+    {
+        $mission = $this->assignTest(['attempts_allowed' => 2, 'due_date' => '2026-09-01']);
+
+        $assigned = $this->attemptAndSubmit(correct: true, missionId: $mission->id);
+        $library = $this->attemptAndSubmit(correct: false);
+
+        // Bài cô giao: đủ lớp/buổi/hạn nộp/số lượt để màn kết quả vẽ theo khu lớp học.
+        $res = $this->actingAs($this->student)
+            ->getJson("/api/v1/attempts/{$assigned}/result")->assertOk();
+
+        $this->assertSame('assignment', $res->json('source'));
+        $this->assertSame($mission->id, $res->json('mission.id'));
+        $this->assertSame($this->class->id, $res->json('mission.classroom_id'));
+        $this->assertSame('Lớp 6A', $res->json('mission.classroom_name'));
+        $this->assertSame('Buổi 1', $res->json('mission.session_title'));
+        $this->assertSame('2026-09-01', $res->json('mission.due_date'));
+        $this->assertSame(2, $res->json('mission.attempts_allowed'));
+        $this->assertSame(1, $res->json('mission.attempts_used'));
+
+        // Tự luyện: không có mission → màn kết quả vẽ theo khu Thư viện.
+        $res = $this->actingAs($this->student)
+            ->getJson("/api/v1/attempts/{$library}/result")->assertOk();
+
+        $this->assertSame('library', $res->json('source'));
+        $this->assertNull($res->json('mission'));
+    }
+
+    public function test_in_progress_attempt_state_carries_the_origin(): void
+    {
+        $mission = $this->assignTest();
+
+        $attemptId = $this->actingAs($this->student)
+            ->postJson("/api/v1/tests/{$this->test->id}/attempts", ['mission_id' => $mission->id])
+            ->assertOk()->json('attempt_id');
+
+        // Màn ĐANG làm bài cũng cần biết nguồn để hiện chip "Bài cô giao · <lớp>".
+        $res = $this->actingAs($this->student)
+            ->getJson("/api/v1/attempts/{$attemptId}")->assertOk();
+
+        $this->assertSame('assignment', $res->json('source'));
+        $this->assertSame('Lớp 6A', $res->json('mission.classroom_name'));
+    }
+
     public function test_teacher_results_grid_exposes_the_source(): void
     {
         $mission = $this->assignTest();

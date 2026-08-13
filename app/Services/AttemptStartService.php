@@ -24,15 +24,12 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 class AttemptStartService
 {
-    /** Lượt đã nộp — không còn làm tiếp được, tính vào số lần đã dùng. */
-    private const USED_STATUSES = ['pending_review', 'submitted', 'graded'];
-
     public function start(User $student, Test $test, ?int $missionId): TestAttempt
     {
         $mission = $missionId ? $this->resolveMission($student, $test, $missionId) : null;
 
         if ($mission) {
-            $this->assertAttemptsLeft($student, $test, $mission);
+            $this->assertAttemptsLeft($mission);
         }
 
         return DB::transaction(function () use ($student, $test, $mission) {
@@ -104,26 +101,17 @@ class AttemptStartService
         return $mission;
     }
 
-    /**
-     * Bài giao mặc định chỉ được làm 1 lần (`missions.attempts_allowed`). Đếm trên các lượt
-     * CÙNG mission: cộng `attempt_count` vì dedup gộp nhiều lần nộp vào một dòng, còn lượt
-     * `pending_review` thì không bị gộp nên nằm ở nhiều dòng.
-     */
-    private function assertAttemptsLeft(User $student, Test $test, Mission $mission): void
+    /** Bài giao mặc định chỉ được làm 1 lần — xem Mission::attemptsUsed(). */
+    private function assertAttemptsLeft(Mission $mission): void
     {
+        if ($mission->hasAttemptsLeft()) {
+            return;
+        }
+
         $allowed = max(1, (int) ($mission->attempts_allowed ?? 1));
 
-        $used = (int) TestAttempt::query()
-            ->where('user_id', $student->id)
-            ->where('test_id', $test->id)
-            ->where('mission_id', $mission->id)
-            ->whereIn('status', self::USED_STATUSES)
-            ->sum('attempt_count');
-
-        if ($used >= $allowed) {
-            throw ValidationException::withMessages([
-                'mission_id' => "Em đã dùng hết {$allowed} lượt làm bài của nhiệm vụ này.",
-            ]);
-        }
+        throw ValidationException::withMessages([
+            'mission_id' => "Em đã dùng hết {$allowed} lượt làm bài của nhiệm vụ này.",
+        ]);
     }
 }
