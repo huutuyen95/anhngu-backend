@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,8 @@ class TestAttempt extends Model
         'user_id',
         'test_id',
         'classroom_id',
+        'mission_id',
+        'source',
         'attempt_category',
         'started_at',
         'submitted_at',
@@ -79,6 +82,51 @@ class TestAttempt extends Model
     public function classroom(): BelongsTo
     {
         return $this->belongsTo(Classroom::class);
+    }
+
+    public function mission(): BelongsTo
+    {
+        return $this->belongsTo(Mission::class);
+    }
+
+    /**
+     * Lượt của bài ĐƯỢC GIAO trong lớp. Mọi số liệu báo cáo lớp phải đi qua đây — lượt tự
+     * luyện ở Thư viện (`mission_id` null) không được tính vào tiến trình/điểm của lớp.
+     *
+     * @param  Builder<TestAttempt>  $query
+     */
+    public function scopeAssigned($query): void
+    {
+        $query->whereNotNull('mission_id');
+    }
+
+    /**
+     * Lượt đã chốt điểm: tự chấm xong (`submitted`) hoặc cô đã chấm tay (`graded`).
+     * `pending_review` mới có điểm tạm của phần tự chấm nên bị loại.
+     *
+     * @param  Builder<TestAttempt>  $query
+     */
+    public function scopeScored($query): void
+    {
+        $query->whereIn('status', ['submitted', 'graded'])->whereNotNull('total_score');
+    }
+
+    /**
+     * Giới hạn truy vấn về đúng "nguồn" của lượt `$attempt`: bài được giao thì chỉ đụng tới
+     * các lượt cùng mission, tự luyện thì chỉ đụng tới các lượt tự luyện khác. Dùng cho dedup
+     * lượt-điểm-cao-nhất — chỗ trước đây gộp chung cả hai nguồn và xoá chéo dữ liệu.
+     *
+     * @param  Builder<TestAttempt>  $query
+     */
+    public function scopeSameScope($query, self $attempt): void
+    {
+        $query->where('user_id', $attempt->user_id)
+            ->where('test_id', $attempt->test_id)
+            ->when(
+                $attempt->mission_id,
+                fn ($q) => $q->where('mission_id', $attempt->mission_id),
+                fn ($q) => $q->whereNull('mission_id'),
+            );
     }
 
     public function answers(): HasMany

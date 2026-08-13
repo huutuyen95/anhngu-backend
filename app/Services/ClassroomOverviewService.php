@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Classroom;
 use App\Models\Mission;
 use App\Models\TestAttempt;
+use App\Models\User;
+use Illuminate\Support\Collection;
 
 class ClassroomOverviewService
 {
@@ -23,6 +25,7 @@ class ClassroomOverviewService
         $totalStudents = $students->count();
 
         $activeStudents = TestAttempt::where('classroom_id', $classroom->id)
+            ->assigned()
             ->where('submitted_at', '>=', now()->subDays(30))
             ->distinct('user_id')
             ->count('user_id');
@@ -46,7 +49,7 @@ class ClassroomOverviewService
     /**
      * Học viên cần chú ý: ≥2 bài quá hạn chưa làm · điểm TB < 6 · (không hoạt động ≥7 ngày).
      *
-     * @param  \Illuminate\Support\Collection<int, \App\Models\User>  $students
+     * @param  Collection<int, User>  $students
      * @return array<int, array<string, mixed>>
      */
     private function atRisk(Classroom $classroom, $students): array
@@ -64,8 +67,8 @@ class ClassroomOverviewService
 
             $avg = (float) (TestAttempt::where('classroom_id', $classroom->id)
                 ->where('user_id', $student->id)
-                ->where('status', 'submitted')
-                ->whereNotNull('total_score')
+                ->assigned()
+                ->scored()
                 ->avg('total_score') ?? 0);
 
             $reason = null;

@@ -29,7 +29,9 @@ class AttemptGradingService
             ->when($filters['classroom_id'] ?? null, fn ($q, $id) => $q->where('classroom_id', $id))
             ->when($filters['test_id'] ?? null, fn ($q, $id) => $q->where('test_id', $id))
             ->when($filters['user_id'] ?? null, fn ($q, $id) => $q->where('user_id', $id))
-            ->with(['user:id,name,email', 'test:id,title,skill'])
+            // Lọc theo nguồn: `assignment` = bài giao trong lớp, `library` = em tự luyện.
+            ->when($filters['source'] ?? null, fn ($q, $source) => $q->where('source', $source))
+            ->with(['user:id,name,email', 'test:id,title,skill', 'classroom:id,name'])
             ->orderByDesc('submitted_at')
             ->paginate((int) ($filters['per_page'] ?? 15))
             ->withQueryString();
@@ -39,6 +41,7 @@ class AttemptGradingService
     {
         return $attempt->load([
             'user:id,name,email',
+            'classroom:id,name',
             'test',
             'test.parts' => fn ($q) => $q->orderBy('order'),
             'test.parts.sections' => fn ($q) => $q->orderBy('order'),

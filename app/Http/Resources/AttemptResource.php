@@ -2,13 +2,14 @@
 
 namespace App\Http\Resources;
 
+use App\Models\TestAttempt;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * Dòng danh sách "Kết quả làm bài" / "Chờ chấm" cho giáo viên.
  *
- * @mixin \App\Models\TestAttempt
+ * @mixin TestAttempt
  */
 class AttemptResource extends JsonResource
 {
@@ -30,6 +31,12 @@ class AttemptResource extends JsonResource
                 'name' => $this->user->name,
                 'email' => $this->user->email,
             ]),
+            // Nguồn của lượt: bài cô giao trong lớp hay em tự luyện ở Thư viện.
+            'source' => $this->source,
+            'classroom' => $this->whenLoaded('classroom', fn () => $this->classroom ? [
+                'id' => $this->classroom->id,
+                'name' => $this->classroom->name,
+            ] : null),
             'total_score' => $this->total_score !== null ? (float) $this->total_score : null,
             'correct_count' => $this->correct_count,
             'question_count' => $this->question_count,

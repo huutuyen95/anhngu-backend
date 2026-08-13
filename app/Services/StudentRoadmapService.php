@@ -72,14 +72,15 @@ class StudentRoadmapService
             ->get();
 
         // Nạp trước dữ liệu tiến độ để tránh N+1.
-        $testIds = $missions->filter(fn ($m) => $m->missionable instanceof Test)->pluck('missionable_id');
         $docIds = $missions->filter(fn ($m) => $m->missionable instanceof Document)->pluck('missionable_id');
         $deckModels = $missions->filter(fn ($m) => $m->missionable instanceof Deck)->pluck('missionable');
 
+        // Gom theo MISSION chứ không theo test: lượt em tự luyện cùng đề đó ở Thư viện
+        // (mission_id = null) không được tính là đã làm bài cô giao.
         $attempts = TestAttempt::where('user_id', $student->id)
-            ->whereIn('test_id', $testIds)
+            ->whereIn('mission_id', $missions->pluck('id'))
             ->get()
-            ->groupBy('test_id');
+            ->groupBy('mission_id');
 
         $views = DocumentView::where('user_id', $student->id)
             ->whereIn('document_id', $docIds)
@@ -177,7 +178,7 @@ class StudentRoadmapService
                 $status = 'in_progress';
             }
         } elseif ($model instanceof Test) {
-            $list = collect($attempts->get($model->id) ?? []);
+            $list = collect($attempts->get($mission->id) ?? []);
             $inProgress = $list->firstWhere('status', 'in_progress');
             $finished = $list->whereIn('status', ['submitted', 'pending_review', 'graded'])->sortByDesc('id')->first();
             $attemptsUsed = $list->whereIn('status', ['submitted', 'pending_review', 'graded'])->count();
@@ -258,9 +259,12 @@ class StudentRoadmapService
         $doneCount = $sessionsOut->sum('done');
         $totalCount = $sessionsOut->sum('total');
 
+        // Chỉ điểm bài cô giao trong lớp này (mission_id != null) — điểm tự luyện ở Thư viện
+        // không được kéo điểm TB của lớp lên/xuống.
         $myAvg = TestAttempt::where('classroom_id', $classroom->id)
             ->where('user_id', $student->id)
-            ->where('status', 'submitted')
+            ->whereNotNull('mission_id')
+            ->whereIn('status', ['submitted', 'graded'])
             ->whereNotNull('total_score')
             ->avg('total_score');
 

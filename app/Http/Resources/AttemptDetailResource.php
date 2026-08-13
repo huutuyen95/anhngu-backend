@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\TestAttempt;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -9,7 +10,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * Chi tiết 1 bài làm cho giáo viên chấm: cây đề (kèm đáp án đúng) ghép với câu trả lời của
  * học sinh — kể cả câu writing (answer_text/feedback/graded_by/graded_at).
  *
- * @mixin \App\Models\TestAttempt
+ * @mixin TestAttempt
  */
 class AttemptDetailResource extends JsonResource
 {
@@ -25,6 +26,11 @@ class AttemptDetailResource extends JsonResource
         return [
             'id' => $this->id,
             'status' => $this->status,
+            'source' => $this->source,
+            'classroom' => $this->whenLoaded('classroom', fn () => $this->classroom ? [
+                'id' => $this->classroom->id,
+                'name' => $this->classroom->name,
+            ] : null),
             'total_score' => $this->total_score !== null ? (float) $this->total_score : null,
             'correct_count' => $this->correct_count,
             'question_count' => $this->question_count,
