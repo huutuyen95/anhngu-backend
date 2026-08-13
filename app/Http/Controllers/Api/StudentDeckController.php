@@ -105,7 +105,8 @@ class StudentDeckController extends Controller
             ->count();
 
         $missionDone = false;
-        if ($total > 0 && $known / $total >= 0.8) {
+        $completePct = (int) setting('content.deck_complete_pct', 80) / 100;
+        if ($total > 0 && $known / $total >= $completePct) {
             $missions = Mission::where('user_id', $user->id)
                 ->where('missionable_type', $deck->getMorphClass())
                 ->where('missionable_id', $deck->id)

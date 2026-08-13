@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\Setting;
 use App\Models\Test;
 use App\Models\TestAttempt;
 use App\Models\User;
+use App\Services\SettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -100,8 +102,17 @@ class AttemptStateAndTabExitTest extends TestCase
         ]);
     }
 
-    public function test_exceeding_tab_exit_limit_auto_submits(): void
+    private function setSetting(string $key, string $value, string $group): void
     {
+        Setting::updateOrCreate(['key' => $key], ['value' => $value, 'type' => 'string', 'group' => $group]);
+        app(SettingService::class)->flush();
+    }
+
+    public function test_exceeding_tab_exit_limit_auto_submits_when_action_is_autosubmit(): void
+    {
+        // Snapshot lấy cấu hình lúc BẮT ĐẦU → set trước khi tạo lượt.
+        $this->setSetting('exam.leave_action', 'autosubmit', 'exam');
+
         $student = User::factory()->create();
         $test = $this->makeTest();
         $attemptId = $this->startAttempt($student, $test);
@@ -119,6 +130,26 @@ class AttemptStateAndTabExitTest extends TestCase
             ->assertJsonPath('reason', 'tab_exit_exceeded');
 
         $this->assertDatabaseMissing('test_attempts', [
+            'id' => $attemptId,
+            'status' => 'in_progress',
+        ]);
+    }
+
+    public function test_default_warn_action_does_not_auto_submit_on_exceed(): void
+    {
+        // Mặc định exam.leave_action = warn → chỉ đếm, KHÔNG tự nộp.
+        $student = User::factory()->create();
+        $test = $this->makeTest();
+        $attemptId = $this->startAttempt($student, $test);
+
+        for ($i = 0; $i < TestAttempt::TAB_EXIT_LIMIT + 2; $i++) {
+            $this->actingAs($student)->postJson("/api/v1/attempts/{$attemptId}/tab-exit")
+                ->assertOk()
+                ->assertJsonPath('auto_submitted', false)
+                ->assertJsonPath('tab_exit_action', 'warn');
+        }
+
+        $this->assertDatabaseHas('test_attempts', [
             'id' => $attemptId,
             'status' => 'in_progress',
         ]);

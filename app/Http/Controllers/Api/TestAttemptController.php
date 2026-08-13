@@ -42,6 +42,17 @@ class TestAttemptController extends Controller
                 'status' => 'in_progress',
                 'started_at' => now(),
                 'question_count' => $test->questionCount(),
+                // Chụp cấu hình lúc bắt đầu — đổi cấu hình giữa chừng không ảnh hưởng lượt này.
+                'config_snapshot' => [
+                    'exam.leave_limit' => (int) setting('exam.leave_limit', 3),
+                    'exam.leave_action' => setting('exam.leave_action', 'warn'),
+                    'exam.autosubmit_on_timeout' => (bool) setting('exam.autosubmit_on_timeout', true),
+                    'exam.block_copy' => (bool) setting('exam.block_copy', true),
+                    'exam.disable_dictionary' => (bool) setting('exam.disable_dictionary', true),
+                    'grading.method' => setting('grading.method', 'scale_10_even'),
+                    'grading.decimals' => (int) setting('grading.decimals', 1),
+                    'grading.pass_score' => (float) setting('grading.pass_score', 5.0),
+                ],
             ]);
         });
 
@@ -110,7 +121,19 @@ class TestAttemptController extends Controller
     {
         abort_if($attempt->user_id !== $request->user()->id, 403);
 
-        return response()->json($this->gradingService->submit($attempt));
+        $result = $this->gradingService->submit($attempt);
+        $result['grading'] = $this->gradingConfig($attempt);
+
+        return response()->json($result);
+    }
+
+    /** Cấu hình hiển thị điểm (số thập phân, điểm đạt) — theo snapshot lúc bắt đầu. */
+    private function gradingConfig(TestAttempt $attempt): array
+    {
+        return [
+            'decimals' => (int) $attempt->configValue('grading.decimals', 1),
+            'pass_score' => (float) $attempt->configValue('grading.pass_score', 5.0),
+        ];
     }
 
     public function result(Request $request, TestAttempt $attempt)
@@ -138,6 +161,7 @@ class TestAttemptController extends Controller
             'question_count' => $attempt->question_count,
             'started_at' => $attempt->started_at,
             'submitted_at' => $attempt->submitted_at,
+            'grading' => $this->gradingConfig($attempt),
             'test' => new TestDetailResource($test, revealAnswers: true),
             'answers' => $attempt->answers->map(fn (AttemptAnswer $answer) => [
                 'question_id' => $answer->question_id,
@@ -168,7 +192,10 @@ class TestAttemptController extends Controller
             'started_at' => $attempt->started_at,
             'deadline' => $attempt->deadlineAt(),
             'tab_exit_count' => $attempt->tab_exit_count,
-            'tab_exit_limit' => TestAttempt::TAB_EXIT_LIMIT,
+            'tab_exit_limit' => (int) $attempt->configValue('exam.leave_limit', TestAttempt::TAB_EXIT_LIMIT),
+            'tab_exit_action' => $attempt->configValue('exam.leave_action', 'warn'),
+            'block_copy' => (bool) $attempt->configValue('exam.block_copy', true),
+            'autosubmit_on_timeout' => (bool) $attempt->configValue('exam.autosubmit_on_timeout', true),
             'answers' => $attempt->answers->map(fn (AttemptAnswer $answer) => [
                 'question_id' => $answer->question_id,
                 'question_option_id' => $answer->question_option_id,
@@ -185,13 +212,16 @@ class TestAttemptController extends Controller
     {
         abort_if($attempt->user_id !== $request->user()->id, 403);
 
-        $limit = TestAttempt::TAB_EXIT_LIMIT;
+        // Lấy theo snapshot lúc bắt đầu — đổi cấu hình giữa chừng không ảnh hưởng lượt này.
+        $limit = (int) $attempt->configValue('exam.leave_limit', TestAttempt::TAB_EXIT_LIMIT);
+        $action = $attempt->configValue('exam.leave_action', 'warn');
 
         // Đã nộp (tự động hoặc thủ công) → không đếm thêm, không nộp lại.
         if ($attempt->status !== 'in_progress') {
             return response()->json([
                 'tab_exit_count' => $attempt->tab_exit_count,
                 'tab_exit_limit' => $limit,
+                'tab_exit_action' => $action,
                 'auto_submitted' => true,
                 'status' => $attempt->status,
             ]);
@@ -200,12 +230,14 @@ class TestAttemptController extends Controller
         $attempt->increment('tab_exit_count');
         $attempt->refresh();
 
-        if ($attempt->tab_exit_count > $limit) {
+        // Chỉ tự nộp khi cấu hình là 'autosubmit'. 'warn'/'log' chỉ đếm.
+        if ($action === 'autosubmit' && $attempt->tab_exit_count > $limit) {
             $result = $this->gradingService->submit($attempt);
 
             return response()->json([
                 'tab_exit_count' => $attempt->tab_exit_count,
                 'tab_exit_limit' => $limit,
+                'tab_exit_action' => $action,
                 'auto_submitted' => true,
                 'reason' => 'tab_exit_exceeded',
                 'result' => $result,
@@ -215,6 +247,7 @@ class TestAttemptController extends Controller
         return response()->json([
             'tab_exit_count' => $attempt->tab_exit_count,
             'tab_exit_limit' => $limit,
+            'tab_exit_action' => $action,
             'auto_submitted' => false,
         ]);
     }

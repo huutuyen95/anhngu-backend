@@ -300,7 +300,8 @@ class AdminTestService
             'instruction' => $data['instruction'] ?? null,
             'passage' => $data['passage'] ?? null,
             'audio_url' => $data['audio_url'] ?? null,
-            'max_plays' => $data['max_plays'] ?? null,
+            // Section có audio (đề nghe) mà chưa đặt số lần nghe → lấy mặc định từ cấu hình.
+            'max_plays' => $data['max_plays'] ?? (($data['audio_url'] ?? null) ? setting('content.listening_max_plays', 2) : null),
         ];
 
         if ($section) {

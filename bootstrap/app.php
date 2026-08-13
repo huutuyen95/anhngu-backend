@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureNotMaintenance;
 use App\Http\Middleware\EnsureRole;
+use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\EnsureTokenScope;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -18,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => EnsureRole::class,
             'token' => EnsureTokenScope::class,
+            'maintenance' => EnsureNotMaintenance::class,
+            'superadmin' => EnsureSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
