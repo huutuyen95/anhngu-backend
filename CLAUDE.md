@@ -100,8 +100,8 @@ Giáo viên / admin (`role:teacher,admin`):
 - `admin/tests` (apiResource) + `admin/tests/{test}/duplicate|preflight|category|structure`,
   import Word (`admin/tests/import-word`, `.../commit`, `admin/tests/word-template`),
   `admin/tests/{test}/sections/{section}/audio`, `admin/test-categories`.
-- `GET admin/attempts` (mặc định lọc `status=pending_review`) · `GET admin/attempts/{attempt}` ·
-  `POST admin/attempts/{attempt}/grade`.
+- `GET admin/attempts` (không truyền `status` → trả **mọi trạng thái**; lọc "Chờ chấm" thì gửi
+  `status=pending_review`) · `GET admin/attempts/{attempt}` · `POST admin/attempts/{attempt}/grade`.
 
 ## Quy ước
 

@@ -18,14 +18,15 @@ class AttemptGradingService
     public function __construct(private readonly TestGradingService $gradingService) {}
 
     /**
-     * Danh sách bài làm cần/đã chấm — mặc định `status=pending_review` ("Chờ chấm").
+     * Danh sách bài làm cần/đã chấm. KHÔNG có `status` → trả mọi trạng thái (tab "Tất cả"
+     * bên FE không gửi tham số này); tab "Chờ chấm" tự gửi `status=pending_review`.
      *
      * @param  array<string, mixed>  $filters
      */
     public function list(array $filters): LengthAwarePaginator
     {
         return TestAttempt::query()
-            ->where('status', $filters['status'] ?? 'pending_review')
+            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($filters['classroom_id'] ?? null, fn ($q, $id) => $q->where('classroom_id', $id))
             ->when($filters['test_id'] ?? null, fn ($q, $id) => $q->where('test_id', $id))
             ->when($filters['user_id'] ?? null, fn ($q, $id) => $q->where('user_id', $id))
