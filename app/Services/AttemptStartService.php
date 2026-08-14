@@ -59,6 +59,10 @@ class AttemptStartService
                 'source' => $mission ? 'assignment' : 'library',
                 'status' => 'in_progress',
                 'started_at' => now(),
+                // Đồng hồ tính theo SỐ GIÂY CÒN LẠI (dừng khi học viên rời màn làm bài),
+                // không phải mốc hết giờ tuyệt đối. Đề không giới hạn giờ thì để null.
+                'remaining_seconds' => $test->duration_minutes > 0 ? $test->duration_minutes * 60 : null,
+                'resumed_at' => $test->duration_minutes > 0 ? now() : null,
                 'question_count' => $test->questionCount(),
                 // Chụp cấu hình lúc bắt đầu — đổi cấu hình giữa chừng không ảnh hưởng lượt này.
                 'config_snapshot' => [

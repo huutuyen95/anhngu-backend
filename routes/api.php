@@ -74,6 +74,9 @@ Route::prefix('v1')->group(function () {
         Route::post('tests/{test}/attempts', [TestAttemptController::class, 'start']);
         Route::get('attempts/{attempt}', [TestAttemptController::class, 'show']);
         Route::post('attempts/{attempt}/tab-exit', [TestAttemptController::class, 'tabExit']);
+        // Đồng hồ chỉ chạy khi học viên đang ở trong màn làm bài.
+        Route::post('attempts/{attempt}/pause', [TestAttemptController::class, 'pauseClock']);
+        Route::post('attempts/{attempt}/resume', [TestAttemptController::class, 'resumeClock']);
         Route::put('attempts/{attempt}/answers', [TestAttemptController::class, 'saveAnswers']);
         Route::post('attempts/{attempt}/answers/{question}/audio', [TestAttemptController::class, 'uploadAudio']);
         Route::delete('attempts/{attempt}/answers/{question}/audio', [TestAttemptController::class, 'deleteAudio']);

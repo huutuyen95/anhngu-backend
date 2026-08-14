@@ -29,6 +29,8 @@ class TestAttempt extends Model
         'correct_count',
         'question_count',
         'tab_exit_count',
+        'remaining_seconds',
+        'resumed_at',
         'config_snapshot',
         'attempt_count',
         'last_attempted_at',
@@ -40,6 +42,7 @@ class TestAttempt extends Model
         return [
             'started_at' => 'datetime',
             'submitted_at' => 'datetime',
+            'resumed_at' => 'datetime',
             'last_attempted_at' => 'datetime',
             'total_score' => 'decimal:2',
             'config_snapshot' => 'array',
@@ -54,19 +57,89 @@ class TestAttempt extends Model
         return $snapshot[$key] ?? setting($key, $default);
     }
 
+    /** Đề có giới hạn giờ hay không. Cần quan hệ `test` đã nạp. */
+    public function isTimed(): bool
+    {
+        return (int) $this->test->duration_minutes > 0;
+    }
+
     /**
-     * Hạn nộp = started_at + thời lượng đề. `null` nếu đề không giới hạn thời gian
-     * (duration_minutes = 0). Cần quan hệ `test` đã nạp.
+     * Đồng hồ đang chạy (học viên đang ở trong màn làm bài).
+     * Lượt cũ chưa có `remaining_seconds` được coi như đang chạy — nó vẫn tính theo
+     * mốc bắt đầu cho tới lần tạm dừng đầu tiên.
+     */
+    public function clockRunning(): bool
+    {
+        return $this->remaining_seconds === null || $this->resumed_at !== null;
+    }
+
+    /**
+     * Hạn nộp khi đồng hồ ĐANG CHẠY = resumed_at + số giây còn lại.
+     * `null` khi đề không giới hạn giờ HOẶC đồng hồ đang tạm dừng (học viên đã rời màn
+     * làm bài) — lúc đó dùng `remainingSeconds()` để biết còn bao nhiêu.
      */
     public function deadlineAt(): ?Carbon
     {
-        if (! $this->started_at) {
+        if (! $this->started_at || ! $this->isTimed()) {
             return null;
         }
 
-        $duration = (int) $this->test->duration_minutes;
+        // Phòng lượt cũ chưa kịp backfill: vẫn tính theo mốc bắt đầu như trước.
+        if ($this->remaining_seconds === null) {
+            return $this->started_at->clone()->addMinutes((int) $this->test->duration_minutes);
+        }
 
-        return $duration > 0 ? $this->started_at->clone()->addMinutes($duration) : null;
+        if (! $this->clockRunning()) {
+            return null;
+        }
+
+        return $this->resumed_at->clone()->addSeconds((int) $this->remaining_seconds);
+    }
+
+    /** Số giây còn lại ngay lúc này; `null` nếu đề không giới hạn giờ. */
+    public function remainingSeconds(): ?int
+    {
+        if (! $this->isTimed()) {
+            return null;
+        }
+
+        $deadline = $this->deadlineAt();
+
+        if ($deadline) {
+            return max(0, $deadline->getTimestamp() - now()->getTimestamp());
+        }
+
+        return max(0, (int) ($this->remaining_seconds ?? 0));
+    }
+
+    /**
+     * Dừng đồng hồ, chốt lại số giây còn lại. Gọi khi học viên rời màn làm bài.
+     * Gọi nhiều lần liên tiếp là an toàn (lần sau không trừ thêm).
+     */
+    public function pauseClock(): void
+    {
+        if (! $this->isTimed() || ! $this->clockRunning()) {
+            return;
+        }
+
+        $this->forceFill([
+            'remaining_seconds' => $this->remainingSeconds(),
+            'resumed_at' => null,
+        ])->save();
+    }
+
+    /** Chạy lại đồng hồ từ số giây còn lại. Gọi khi học viên quay vào làm tiếp. */
+    public function resumeClock(): void
+    {
+        if (! $this->isTimed() || $this->clockRunning()) {
+            return;
+        }
+
+        $this->forceFill([
+            // Lượt cũ chưa có số giây còn lại → chốt theo cách tính cũ ngay lần đầu.
+            'remaining_seconds' => $this->remainingSeconds(),
+            'resumed_at' => now(),
+        ])->save();
     }
 
     public function user(): BelongsTo

@@ -35,12 +35,12 @@ class TestAttemptController extends Controller
 
         $attempt = $this->startService->start($request->user(), $test, $data['mission_id'] ?? null);
 
-        $deadline = $attempt->started_at->clone()->addMinutes($test->duration_minutes);
+        $attempt->setRelation('test', $test);
 
         return response()->json([
             'attempt_id' => $attempt->id,
             'started_at' => $attempt->started_at,
-            'deadline' => $deadline,
+            ...$this->clockState($attempt),
             'mission_id' => $attempt->mission_id,
             'source' => $attempt->source,
         ]);
@@ -212,7 +212,7 @@ class TestAttemptController extends Controller
             'source' => $attempt->source,
             'mission' => $this->missionContext($attempt),
             'started_at' => $attempt->started_at,
-            'deadline' => $attempt->deadlineAt(),
+            ...$this->clockState($attempt),
             'tab_exit_count' => $attempt->tab_exit_count,
             'tab_exit_limit' => (int) $attempt->configValue('exam.leave_limit', TestAttempt::TAB_EXIT_LIMIT),
             'tab_exit_action' => $attempt->configValue('exam.leave_action', 'warn'),
@@ -230,6 +230,51 @@ class TestAttemptController extends Controller
      * Ghi nhận một lần học sinh rời khỏi tab làm bài. Đếm server-side để reload không
      * reset được. Vượt quá TAB_EXIT_LIMIT → tự nộp bài ngay và trả kết quả cho FE.
      */
+    /**
+     * Đồng hồ của lượt làm, dạng FE dùng được ngay.
+     *
+     * @return array<string, mixed>
+     */
+    private function clockState(TestAttempt $attempt): array
+    {
+        return [
+            'deadline' => $attempt->deadlineAt(),
+            'remaining_seconds' => $attempt->remainingSeconds(),
+            'clock_running' => $attempt->clockRunning(),
+        ];
+    }
+
+    /**
+     * Học viên rời màn làm bài → DỪNG đồng hồ, chốt số giây còn lại. Thời gian ở ngoài
+     * không bị tính. Cặp với `resume` bên dưới.
+     */
+    public function pauseClock(Request $request, TestAttempt $attempt)
+    {
+        abort_if($attempt->user_id !== $request->user()->id, 403);
+
+        $attempt->load('test:id,duration_minutes');
+
+        if ($attempt->status === 'in_progress') {
+            $attempt->pauseClock();
+        }
+
+        return response()->json($this->clockState($attempt));
+    }
+
+    /** Học viên quay lại làm tiếp → chạy lại đồng hồ từ đúng chỗ đã dừng. */
+    public function resumeClock(Request $request, TestAttempt $attempt)
+    {
+        abort_if($attempt->user_id !== $request->user()->id, 403);
+
+        $attempt->load('test:id,duration_minutes');
+
+        if ($attempt->status === 'in_progress') {
+            $attempt->resumeClock();
+        }
+
+        return response()->json($this->clockState($attempt));
+    }
+
     public function tabExit(Request $request, TestAttempt $attempt)
     {
         abort_if($attempt->user_id !== $request->user()->id, 403);
