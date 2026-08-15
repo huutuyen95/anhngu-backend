@@ -59,6 +59,9 @@ class TestDetailResource extends JsonResource
                         'order' => $question->order,
                         'type' => $question->type->value,
                         'content' => $question->content,
+                        // Gợi ý luôn đi kèm câu hỏi (KHÔNG gate theo revealAnswers) — học viên
+                        // cần thấy nó ngay lúc làm bài, khác hẳn `explanation`.
+                        'hint' => $question->hint,
                         'audio_url' => $question->audio_url,
                         'images' => $question->images,
                         'record_limit_seconds' => $question->record_limit_seconds,

@@ -45,6 +45,9 @@ class SaveStructureRequest extends FormRequest
             'parts.*.sections.*.questions.*.order' => ['required', 'integer', 'min:0'],
             'parts.*.sections.*.questions.*.type' => ['required', Rule::enum(QuestionType::class)],
             'parts.*.sections.*.questions.*.content' => ['nullable', 'string'],
+            // Gợi ý cho học viên (câu nói: "You should say…") — hiện lúc ĐANG làm bài,
+            // khác `explanation` là lời giải chỉ lộ sau khi nộp.
+            'parts.*.sections.*.questions.*.hint' => ['nullable', 'string', 'max:2000'],
             'parts.*.sections.*.questions.*.audio_url' => ['nullable', 'string', 'max:2048'],
             'parts.*.sections.*.questions.*.images' => ['nullable', 'array'],
             'parts.*.sections.*.questions.*.images.*' => ['string', 'url', 'max:2048'],

@@ -81,7 +81,10 @@ class TestAttemptController extends Controller
         abort_if($attempt->user_id !== $request->user()->id, 403);
 
         $request->validate([
-            'file' => ['required', 'file', 'mimes:mp3,m4a,wav,ogg,aac,webm', 'max:20480'],
+            // Mỗi trình duyệt ghi ra một định dạng khác nhau: Chrome/Android → webm(opus),
+            // Safari trên iPhone/iPad/macOS → mp4/m4a, Firefox → ogg. Thiếu định dạng nào
+            // thì học viên dùng thiết bị đó nộp bài bị 422.
+            'file' => ['required', 'file', 'mimes:mp3,m4a,mp4,wav,ogg,oga,aac,webm,3gp,3gpp,amr,caf', 'max:20480'],
         ]);
 
         $answer = $this->audioService->upload($attempt, $question, $request->file('file'));
@@ -187,6 +190,8 @@ class TestAttemptController extends Controller
                 'question_id' => $answer->question_id,
                 'question_option_id' => $answer->question_option_id,
                 'answer_text' => $answer->answer_text,
+                // Bài nói đã nộp — màn kết quả cần để học viên nghe lại.
+                'answer_file_url' => $answer->answer_file_url,
                 'is_correct' => $answer->is_correct,
                 'score' => (float) $answer->score,
                 'feedback' => $answer->feedback,
@@ -222,6 +227,8 @@ class TestAttemptController extends Controller
                 'question_id' => $answer->question_id,
                 'question_option_id' => $answer->question_option_id,
                 'answer_text' => $answer->answer_text,
+                // Thiếu field này thì reload giữa chừng là màn thi tưởng em chưa ghi âm.
+                'answer_file_url' => $answer->answer_file_url,
             ])->values(),
         ]);
     }
