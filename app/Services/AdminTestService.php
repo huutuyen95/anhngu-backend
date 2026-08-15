@@ -323,6 +323,7 @@ class AdminTestService
             'order' => $data['order'],
             'type' => $data['type'],
             'content' => $data['content'] ?? null,
+            'hint' => $data['hint'] ?? null,
             'audio_url' => $data['audio_url'] ?? null,
             'images' => $data['images'] ?? null,
             'record_limit_seconds' => $data['record_limit_seconds'] ?? null,

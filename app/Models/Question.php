@@ -18,6 +18,7 @@ class Question extends Model
         'order',
         'type',
         'content',
+        'hint',
         'audio_url',
         'images',
         'record_limit_seconds',
