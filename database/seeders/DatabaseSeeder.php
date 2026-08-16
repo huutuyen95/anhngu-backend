@@ -90,6 +90,7 @@ class DatabaseSeeder extends Seeder
         $this->seedSampleSpeakingTest($teacher);
         $this->call(IpaDictionarySeeder::class);
         $this->call(DocumentCategoriesSeeder::class);
+        $this->call(VocabularyCategoryDemoSeeder::class);
     }
 
     /**

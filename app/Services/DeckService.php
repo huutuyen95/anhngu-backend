@@ -21,6 +21,7 @@ class DeckService
         return DB::transaction(function () use ($data, $teacher, $classroomIds) {
             $deck = Deck::create([
                 'owner_id' => $teacher->id,
+                'category_id' => $data['category_id'] ?? null,
                 'name' => $data['name'],
                 'slug' => $this->uniqueSlug($data['name']),
                 'description' => $data['description'] ?? null,
@@ -44,6 +45,7 @@ class DeckService
         DB::transaction(function () use ($deck, $data) {
             $deck->fill(array_filter([
                 'name' => $data['name'] ?? null,
+                'category_id' => $data['category_id'] ?? null,
                 'description' => $data['description'] ?? null,
                 'tts_voice' => $data['tts_voice'] ?? null,
                 'tts_rate' => $data['tts_rate'] ?? null,
@@ -66,6 +68,7 @@ class DeckService
         return DB::transaction(function () use ($deck) {
             $copy = Deck::create([
                 'owner_id' => $deck->owner_id,
+                'category_id' => $deck->category_id,
                 'name' => $deck->name.' (bản sao)',
                 'slug' => $this->uniqueSlug($deck->name),
                 'description' => $deck->description,

@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ClassStudentController;
 use App\Http\Controllers\Api\ContentController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeckController;
+use App\Http\Controllers\Api\DeckCategoryController;
 use App\Http\Controllers\Api\DictionaryController;
 use App\Http\Controllers\Api\DocumentAttachmentController;
 use App\Http\Controllers\Api\DocumentCategoryController;
@@ -117,6 +118,8 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('documents', DocumentController::class);
 
             // Từ vựng — khu admin (route tĩnh đặt trước {deck})
+            Route::get('deck-categories', [DeckCategoryController::class, 'index']);
+            Route::put('deck-categories/sync', [DeckCategoryController::class, 'sync']);
             Route::get('decks/cards-import-template', [CardController::class, 'importTemplate']);
             Route::get('ipa/lookup', [CardController::class, 'ipaLookup']);
             Route::get('decks', [DeckController::class, 'index']);
