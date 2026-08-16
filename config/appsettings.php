@@ -29,7 +29,7 @@ return [
                 'brand.student.logo' => ['label' => 'Logo khu học sinh', 'hint' => 'PNG/JPG/SVG, ≤ 2MB.', 'type' => 'file', 'default' => null, 'accept' => 'png,jpg,jpeg,svg', 'max_kb' => 2048],
                 'brand.student.favicon' => ['label' => 'Favicon khu học sinh', 'hint' => 'ICO/PNG/SVG, ≤ 1MB.', 'type' => 'file', 'default' => null, 'accept' => 'ico,png,svg', 'max_kb' => 1024],
                 'brand.student.pwa_icon' => ['label' => 'Icon PWA (512×512)', 'hint' => 'PNG vuông 512×512, ≤ 1MB — dùng khi cài app.', 'type' => 'file', 'default' => null, 'accept' => 'png', 'max_kb' => 1024],
-                'brand.student.banner' => ['label' => 'Banner trang chủ học sinh', 'hint' => 'PNG/JPG, ≤ 2MB.', 'type' => 'file', 'default' => null, 'accept' => 'png,jpg,jpeg', 'max_kb' => 2048],
+                'brand.student.banner' => ['label' => 'Banner đầu trang menu học sinh', 'hint' => 'Hiện ở đầu Nhiệm vụ, Lớp của em, Thư viện và Báo cáo. Nên dùng ảnh ngang 1920×420px, PNG/JPG, ≤ 4MB.', 'type' => 'file', 'default' => null, 'accept' => 'png,jpg,jpeg,webp', 'max_kb' => 4096],
                 'brand.student.login_cover' => ['label' => 'Ảnh nền trang đăng nhập', 'hint' => 'PNG/JPG, ≤ 2MB.', 'type' => 'file', 'default' => null, 'accept' => 'png,jpg,jpeg', 'max_kb' => 2048],
             ],
         ],

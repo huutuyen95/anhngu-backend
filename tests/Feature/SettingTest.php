@@ -164,9 +164,12 @@ class SettingTest extends TestCase
 
     public function test_public_branding_is_accessible_without_auth(): void
     {
+        app(SettingService::class)->set(['brand.student.banner' => 'http://localhost/storage/branding/student-banner.jpg']);
+
         $this->getJson('/api/v1/public/branding')
             ->assertOk()
-            ->assertJsonStructure(['center_name', 'primary_color', 'admin', 'student', 'maintenance']);
+            ->assertJsonStructure(['center_name', 'primary_color', 'admin', 'student', 'maintenance'])
+            ->assertJsonPath('student.banner', 'http://localhost/storage/branding/student-banner.jpg');
     }
 
     public function test_maintenance_blocks_students_not_teachers(): void
