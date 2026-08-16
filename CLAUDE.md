@@ -46,6 +46,10 @@ Sửa file code trong `backend/` là container thấy ngay (bind-mount).
 - **Đề thi**: `tests` → `test_parts` → `test_sections` → `questions` → `question_options`.
   Làm bài: `test_attempts` → `attempt_answers` (+ `attempt_skill_scores` cho đề combo).
   Đề xếp theo thư mục: `test_categories` (`tests.category_id`).
+  **Nguồn lượt làm** (`test_attempts.mission_id` + `source`): có `mission_id` = bài cô giao trong lớp
+  → `source='assignment'`; không có = tự luyện ở Thư viện → `source='library'` (đặt ở
+  `AttemptStartService`). Dedup lượt điểm cao nhất tính **theo scope** (mỗi user × test × mission),
+  nên lượt tự luyện và lượt cô giao KHÔNG đè nhau. Giáo viên lọc kết quả theo `source`.
 - **Flashcard**: `decks` → `cards` → `card_progress`.
 - **Nhiệm vụ**: `missions` (polymorphic). **Log hoạt động**: `activity_logs` (dựng báo cáo).
 - **Cài đặt hệ thống**: `settings(key,value,type,group)` key–value (chỉ lưu giá trị khác default) +
@@ -83,8 +87,10 @@ Học sinh (`auth:sanctum`):
 
 - `GET tests` — danh sách đề đã publish + lượt điểm cao nhất của mình.
 - `GET tests/{test}` — cấu trúc đề (404 nếu chưa publish), ẩn đáp án.
-- `POST tests/{test}/attempts` · `GET attempts/{attempt}` (trạng thái lượt: hạn nộp tính
-  server-side `started_at + duration`, đáp án đã lưu để làm tiếp, `tab_exit_count/limit`) ·
+- `POST tests/{test}/attempts` (body tuỳ chọn `mission_id` → lượt cô giao; không có → tự luyện) ·
+  `GET attempts/{attempt}` (trạng thái lượt: hạn nộp tính
+  server-side `started_at + duration`, đáp án đã lưu để làm tiếp, `tab_exit_count/limit`,
+  `source`/`mission`) ·
   `PUT attempts/{attempt}/answers` · `POST attempts/{attempt}/submit` · `GET attempts/{attempt}/result`.
 - **Chống rời tab** (`POST attempts/{attempt}/tab-exit`): đếm số lần học sinh rời màn thi
   (lưu ở `test_attempts.tab_exit_count` để reload không reset). Vượt `TestAttempt::TAB_EXIT_LIMIT`
@@ -123,8 +129,9 @@ Giáo viên / admin (`role:teacher,admin`):
   - AI chấm chưa làm — mới có cờ `tests.ai_grading`.
 - **Trạng thái attempt** (`test_attempts.status`, string): `in_progress` → `pending_review` →
   `graded`, hoặc `in_progress` → `submitted`.
-- **Dedup lượt làm**: mỗi (user, test) chỉ giữ 1 dòng `test_attempts` = lượt điểm cao nhất
-  (`reconcileBestAttempt` xoá lượt thấp hơn kèm `attempt_answers`).
+- **Dedup lượt làm**: mỗi (user, test, **scope** = `mission_id`) chỉ giữ 1 dòng `test_attempts` =
+  lượt điểm cao nhất (`reconcileBestAttempt` xoá lượt thấp hơn kèm `attempt_answers`) — lượt tự
+  luyện (mission_id null) và lượt cô giao tách riêng, không đè nhau.
 - Git: Conventional Commits (`feat:`/`fix:`/...), làm nhánh `feature/...` → PR → `main`.
 - KHÔNG commit `vendor/`, `.env`.
 

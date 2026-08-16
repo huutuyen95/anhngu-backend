@@ -15,6 +15,7 @@ class CardProgress extends Model
     protected $fillable = [
         'user_id',
         'card_id',
+        'classroom_id',
         'status',
         'next_review_at',
         'ease',

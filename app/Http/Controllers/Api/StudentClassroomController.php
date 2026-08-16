@@ -21,8 +21,9 @@ class StudentClassroomController extends Controller
     /** Lộ trình một lớp (chỉ lớp em thuộc về). */
     public function roadmap(Request $request, Classroom $classroom): JsonResponse
     {
-        $isMember = $classroom->students()->where('users.id', $request->user()->id)->exists();
-        abort_unless($isMember, 403, 'Em không thuộc lớp này.');
+        if ($request->user()->cannot('viewRoadmap', $classroom)) {
+            abort(403, 'Em không ở trong lớp này.');
+        }
 
         return response()->json($this->roadmap->roadmap($classroom, $request->user()));
     }

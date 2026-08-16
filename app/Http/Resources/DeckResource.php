@@ -2,11 +2,12 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Deck;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin \App\Models\Deck
+ * @mixin Deck
  */
 class DeckResource extends JsonResource
 {
@@ -24,6 +25,11 @@ class DeckResource extends JsonResource
             'tts_repeat' => $this->tts_repeat,
             'is_published' => (bool) $this->is_published,
             'owner_name' => $this->whenLoaded('owner', fn () => $this->owner?->name),
+            'category' => $this->whenLoaded('category', fn () => $this->category ? [
+                'id' => $this->category->id,
+                'name' => $this->category->name,
+            ] : null),
+            'category_id' => $this->category_id,
             'classrooms' => $this->whenLoaded('classrooms', fn () => $this->classrooms->map(fn ($c) => [
                 'id' => $c->id,
                 'name' => $c->name,

@@ -18,10 +18,11 @@ class DeckController extends Controller
     public function index(Request $request): JsonResponse
     {
         $page = Deck::query()
-            ->with(['owner:id,name', 'classrooms:id,name'])
+            ->with(['owner:id,name', 'category:id,name', 'classrooms:id,name'])
             ->withCount(['cards', 'cards as audio_ready_count' => $this->audioReadyCount()])
             ->when($request->input('q'), fn ($q, $t) => $q->where('name', 'like', "%{$t}%"))
             ->when($request->input('classroom_id'), fn ($q, $id) => $q->whereHas('classrooms', fn ($c) => $c->where('classrooms.id', $id)))
+            ->when($request->input('category_id'), fn ($q, $id) => $q->where('category_id', $id))
             ->when($request->has('is_published') && $request->input('is_published') !== '', fn ($q) => $q->where('is_published', $request->boolean('is_published')))
             ->latest()
             ->paginate((int) $request->input('per_page', 24));
@@ -37,12 +38,12 @@ class DeckController extends Controller
         $data = $this->validateDeck($request);
         $deck = $this->decks->create($data, $request->user());
 
-        return response()->json(['deck' => new DeckResource($deck->load(['owner:id,name', 'classrooms:id,name'])->loadCount('cards'))], 201);
+        return response()->json(['deck' => new DeckResource($deck->load(['owner:id,name', 'category:id,name', 'classrooms:id,name'])->loadCount('cards'))], 201);
     }
 
     public function show(Deck $deck): JsonResponse
     {
-        $deck->load(['owner:id,name', 'classrooms:id,name'])
+        $deck->load(['owner:id,name', 'category:id,name', 'classrooms:id,name'])
             ->loadCount(['cards', 'cards as audio_ready_count' => $this->audioReadyCount()]);
 
         return response()->json(['deck' => new DeckResource($deck)]);
@@ -53,7 +54,7 @@ class DeckController extends Controller
         $data = $this->validateDeck($request, updating: true);
         $updated = $this->decks->update($deck, $data);
 
-        return response()->json(['deck' => new DeckResource($updated->load(['owner:id,name', 'classrooms:id,name'])->loadCount('cards'))]);
+        return response()->json(['deck' => new DeckResource($updated->load(['owner:id,name', 'category:id,name', 'classrooms:id,name'])->loadCount('cards'))]);
     }
 
     public function publish(Request $request, Deck $deck): JsonResponse
@@ -84,7 +85,7 @@ class DeckController extends Controller
     {
         $copy = $this->decks->duplicate($deck);
 
-        return response()->json(['deck' => new DeckResource($copy->load('classrooms:id,name')->loadCount('cards'))], 201);
+        return response()->json(['deck' => new DeckResource($copy->load(['category:id,name', 'classrooms:id,name'])->loadCount('cards'))], 201);
     }
 
     public function cards(Request $request, Deck $deck): JsonResponse
@@ -107,6 +108,7 @@ class DeckController extends Controller
     {
         return $request->validate([
             'name' => [$updating ? 'sometimes' : 'required', 'string', 'max:255'],
+            'category_id' => ['nullable', 'integer', 'exists:deck_categories,id'],
             'classroom_ids' => ['sometimes', 'array'],
             'classroom_ids.*' => ['integer', 'exists:classrooms,id'],
             'description' => ['nullable', 'string'],

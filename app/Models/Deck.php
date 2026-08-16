@@ -14,6 +14,7 @@ class Deck extends Model
 
     protected $fillable = [
         'owner_id',
+        'category_id',
         'classroom_id',
         'name',
         'slug',
@@ -37,6 +38,11 @@ class Deck extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(DeckCategory::class, 'category_id');
     }
 
     public function cards(): HasMany

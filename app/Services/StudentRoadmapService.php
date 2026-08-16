@@ -24,31 +24,92 @@ class StudentRoadmapService
 {
     public function __construct(private readonly ClassroomStatsService $classStats) {}
 
-    /** Danh sách lớp học sinh đang tham gia. */
+    /** Danh sách lớp học sinh đang tham gia (dữ liệu card màn chọn lớp). */
     public function myClassrooms(User $student): array
     {
+        $today = now()->startOfDay();
+        $dueSoonLimit = now()->addDays(3)->endOfDay();
+        $statusRank = ['active' => 0, 'upcoming' => 1, 'ended' => 2];
+
         return $student->classes()
             ->with('teacher:id,name')
             ->get()
-            ->map(function (Classroom $c) use ($student) {
-                $missions = Mission::where('classroom_id', $c->id)->where('user_id', $student->id);
+            ->map(function (Classroom $c) use ($student, $today, $dueSoonLimit) {
+                // Nhiệm vụ được giao cho em trong lớp (bỏ nháp). status='done' do các luồng
+                // nộp bài / học deck / xem tài liệu tự set → đếm theo đó là chuẩn.
+                $missions = Mission::where('classroom_id', $c->id)
+                    ->where('user_id', $student->id)
+                    ->where('status', '!=', 'draft');
+
                 $total = (clone $missions)->count();
                 $done = (clone $missions)->where('status', 'done')->count();
+                $dueSoon = (clone $missions)->where('status', '!=', 'done')
+                    ->whereNotNull('due_date')
+                    ->whereBetween('due_date', [$today, $dueSoonLimit])
+                    ->count();
+
+                // Điểm TB: chỉ bài cô giao đã có điểm (chờ chấm không tính).
+                $avg = TestAttempt::where('classroom_id', $c->id)
+                    ->where('user_id', $student->id)
+                    ->whereNotNull('mission_id')
+                    ->whereIn('status', ['submitted', 'graded'])
+                    ->whereNotNull('total_score')
+                    ->avg('total_score');
+
+                $lastActivity = (clone $missions)->max('completed_at')
+                    ?? (clone $missions)->max('updated_at');
 
                 return [
                     'id' => $c->id,
                     'name' => $c->name,
+                    'code' => $this->classCode($c->name),
                     'cover_url' => $c->cover_url,
                     'teacher_name' => $c->teacher?->name,
                     'students_count' => $c->students()->count(),
+                    'schedule_text' => null, // chưa có cột lịch học trong classrooms
                     'starts_on' => $c->starts_on?->toDateString(),
                     'ends_on' => $c->ends_on?->toDateString(),
                     'status' => $c->status(),
+                    'progress_pct' => $total > 0 ? (int) round($done / $total * 100) : 0,
+                    'done_count' => $done,
+                    'total_count' => $total,
+                    'todo_count' => $total - $done,
+                    'due_soon_count' => $dueSoon,
+                    'avg_score' => $avg !== null ? round((float) $avg, 1) : null,
+                    'last_activity_at' => $lastActivity,
+                    // giữ tương thích màn cũ
                     'my_progress_pct' => $total > 0 ? (int) round($done / $total * 100) : 0,
                 ];
             })
+            ->sort(function ($a, $b) use ($statusRank) {
+                // active trước (due_soon nhiều lên đầu, rồi ends_on gần nhất), rồi upcoming, cuối ended.
+                $ra = $statusRank[$a['status']] ?? 3;
+                $rb = $statusRank[$b['status']] ?? 3;
+                if ($ra !== $rb) {
+                    return $ra <=> $rb;
+                }
+                if ($a['status'] === 'active') {
+                    if ($a['due_soon_count'] !== $b['due_soon_count']) {
+                        return $b['due_soon_count'] <=> $a['due_soon_count'];
+                    }
+
+                    return ($a['ends_on'] ?? '9999') <=> ($b['ends_on'] ?? '9999');
+                }
+
+                return 0;
+            })
             ->values()
             ->all();
+    }
+
+    /** Suy mã lớp ngắn từ tên (vd "Lớp 6A1 buổi tối" → "6A1"); fallback 3 ký tự đầu. */
+    private function classCode(string $name): string
+    {
+        if (preg_match('/\b\d[\p{L}\d]*\b/u', $name, $m)) {
+            return mb_strtoupper($m[0]);
+        }
+
+        return mb_strtoupper(mb_substr(trim($name), 0, 3));
     }
 
     /** Lộ trình đầy đủ của một lớp cho học sinh. */
@@ -87,7 +148,7 @@ class StudentRoadmapService
             ->get()
             ->keyBy('document_id');
 
-        $deckProgress = $this->deckProgress($student, $deckModels);
+        $deckProgress = $this->deckProgress($student, $deckModels, $classroom);
         $completePct = (int) setting('content.deck_complete_pct', 80) / 100;
 
         $sessionsOut = $sessions->map(function ($session) use ($missions, $attempts, $views, $deckProgress, $completePct, $today) {
@@ -110,7 +171,8 @@ class StudentRoadmapService
                 'progress_pct' => $total > 0 ? (int) round($done / $total * 100) : 0,
                 'done' => $done,
                 'total' => $total,
-                'items' => $items->map(fn ($i) => Arr::except($i, ['done']))->values(),
+                // Buổi bị khoá (chưa tới lịch) không lộ nội dung.
+                'items' => $locked ? [] : $items->map(fn ($i) => Arr::except($i, ['done']))->values(),
             ];
         })->values();
 
@@ -118,6 +180,7 @@ class StudentRoadmapService
             'classroom' => [
                 'id' => $classroom->id,
                 'name' => $classroom->name,
+                'code' => $this->classCode($classroom->name),
                 'description' => $classroom->description,
                 'teacher_name' => $classroom->teacher?->name,
                 'students_count' => $classroom->students()->count(),
@@ -130,15 +193,24 @@ class StudentRoadmapService
         ];
     }
 
-    /** @return array<int, array{known:int,total:int}> */
-    private function deckProgress(User $student, $decks): array
+    /**
+     * Tiến độ deck theo SCOPE lớp — chỉ đếm card_progress có classroom_id = lớp này,
+     * KHÔNG lẫn tiến độ tự luyện Thư viện (classroom_id null).
+     *
+     * @return array<int, array{known:int,total:int}>
+     */
+    private function deckProgress(User $student, $decks, Classroom $classroom): array
     {
         $out = [];
         foreach ($decks as $deck) {
             $cardIds = $deck->cards()->pluck('id');
             $total = $cardIds->count();
             $known = $total > 0
-                ? CardProgress::where('user_id', $student->id)->whereIn('card_id', $cardIds)->where('status', 'known')->count()
+                ? CardProgress::where('user_id', $student->id)
+                    ->whereIn('card_id', $cardIds)
+                    ->where('classroom_id', $classroom->id)
+                    ->where('status', 'known')
+                    ->count()
                 : 0;
             $out[$deck->id] = ['known' => $known, 'total' => $total];
         }
