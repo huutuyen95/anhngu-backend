@@ -65,6 +65,7 @@ class AttemptDetailResource extends JsonResource
                                 'order' => $question->order,
                                 'type' => $question->type->value,
                                 'content' => $question->content,
+                                'hint' => $question->hint,
                                 'score' => (float) $question->score,
                                 'explanation' => $question->explanation,
                                 'images' => $question->images,

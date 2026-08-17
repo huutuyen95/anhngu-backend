@@ -18,7 +18,9 @@ class UploadMediaRequest extends FormRequest
 
         return [
             'type' => ['sometimes', Rule::in(['image', 'audio'])],
-            'file' => $type === 'audio' ? ['required', 'file', 'mimes:mp3,m4a,wav,ogg,aac', 'max:20480'] : ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'file' => $type === 'audio'
+                ? ['required', 'file', 'mimes:mp3,m4a,mp4,wav,ogg,oga,aac,webm,3gp,3gpp,amr,caf', 'max:20480']
+                : ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
         ];
     }
 }

@@ -40,14 +40,14 @@ class TestAttemptService
         $a = $this->attempts->loadResult($a);
         $test = $this->attempts->resultTest($a);
 
-        return ['id' => $a->id, 'status' => $a->status, 'source' => $a->source, 'mission' => $this->missionContext($a), 'total_score' => (float) $a->total_score, 'correct_count' => $a->correct_count, 'question_count' => $a->question_count, 'started_at' => $a->started_at, 'submitted_at' => $a->submitted_at, 'grading' => $this->gradingConfig($a), 'test' => $test, 'answers' => $a->answers->map(fn (AttemptAnswer $x) => ['question_id' => $x->question_id, 'question_option_id' => $x->question_option_id, 'answer_text' => $x->answer_text, 'is_correct' => $x->is_correct, 'score' => (float) $x->score, 'feedback' => $x->feedback, 'graded_by' => $x->gradedBy?->name, 'graded_at' => $x->graded_at])->values()];
+        return ['id' => $a->id, 'status' => $a->status, 'source' => $a->source, 'mission' => $this->missionContext($a), 'total_score' => (float) $a->total_score, 'correct_count' => $a->correct_count, 'question_count' => $a->question_count, 'started_at' => $a->started_at, 'submitted_at' => $a->submitted_at, 'grading' => $this->gradingConfig($a), 'test' => $test, 'answers' => $a->answers->map(fn (AttemptAnswer $x) => ['question_id' => $x->question_id, 'question_option_id' => $x->question_option_id, 'answer_text' => $x->answer_text, 'answer_file_url' => $x->answer_file_url, 'is_correct' => $x->is_correct, 'score' => (float) $x->score, 'feedback' => $x->feedback, 'graded_by' => $x->gradedBy?->name, 'graded_at' => $x->graded_at])->values()];
     }
 
     public function state(TestAttempt $a): array
     {
         $a = $this->attempts->loadState($a);
 
-        return ['id' => $a->id, 'status' => $a->status, 'source' => $a->source, 'mission' => $this->missionContext($a), 'started_at' => $a->started_at] + $this->clockState($a) + ['tab_exit_count' => $a->tab_exit_count, 'tab_exit_limit' => (int) $a->configValue('exam.leave_limit', TestAttempt::TAB_EXIT_LIMIT), 'tab_exit_action' => $a->configValue('exam.leave_action', 'warn'), 'block_copy' => (bool) $a->configValue('exam.block_copy', true), 'autosubmit_on_timeout' => (bool) $a->configValue('exam.autosubmit_on_timeout', true), 'answers' => $a->answers->map(fn (AttemptAnswer $x) => ['question_id' => $x->question_id, 'question_option_id' => $x->question_option_id, 'answer_text' => $x->answer_text])->values()];
+        return ['id' => $a->id, 'status' => $a->status, 'source' => $a->source, 'mission' => $this->missionContext($a), 'started_at' => $a->started_at] + $this->clockState($a) + ['tab_exit_count' => $a->tab_exit_count, 'tab_exit_limit' => (int) $a->configValue('exam.leave_limit', TestAttempt::TAB_EXIT_LIMIT), 'tab_exit_action' => $a->configValue('exam.leave_action', 'warn'), 'block_copy' => (bool) $a->configValue('exam.block_copy', true), 'autosubmit_on_timeout' => (bool) $a->configValue('exam.autosubmit_on_timeout', true), 'answers' => $a->answers->map(fn (AttemptAnswer $x) => ['question_id' => $x->question_id, 'question_option_id' => $x->question_option_id, 'answer_text' => $x->answer_text, 'answer_file_url' => $x->answer_file_url])->values()];
     }
 
     public function clockState(TestAttempt $a): array

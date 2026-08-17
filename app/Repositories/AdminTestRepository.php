@@ -197,6 +197,7 @@ class AdminTestRepository
         $question = isset($data['id']) ? $section->questions()->find($data['id']) : null;
         $attributes = [
             'order' => $data['order'], 'type' => $data['type'], 'content' => $data['content'] ?? null,
+            'hint' => $data['hint'] ?? null,
             'audio_url' => $data['audio_url'] ?? null, 'images' => $data['images'] ?? null,
             'record_limit_seconds' => $data['record_limit_seconds'] ?? null,
             'explanation' => $data['explanation'] ?? null, 'score' => $data['score'] ?? 1,
