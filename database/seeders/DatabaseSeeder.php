@@ -53,9 +53,9 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $vehicles->cards()->createMany([
-            ['order' => 1, 'term' => 'car', 'meaning' => 'ô tô', 'ipa' => '/kɑːr/'],
-            ['order' => 2, 'term' => 'train', 'meaning' => 'tàu hỏa', 'ipa' => '/treɪn/'],
-            ['order' => 3, 'term' => 'bus', 'meaning' => 'xe buýt', 'ipa' => '/bʌs/'],
+            ['order' => 1, 'term' => 'car', 'meaning' => 'ô tô', 'pos' => 'n.', 'ipa' => '/kɑːr/', 'example' => 'I go to school by *car*.'],
+            ['order' => 2, 'term' => 'train', 'meaning' => 'tàu hỏa', 'pos' => 'n.', 'ipa' => '/treɪn/', 'example' => 'I go to school by *train*.'],
+            ['order' => 3, 'term' => 'bus', 'meaning' => 'xe buýt', 'pos' => 'n.', 'ipa' => '/bʌs/', 'example' => 'I go to school by *bus*.'],
         ]);
 
         $animals = Deck::create([
@@ -66,9 +66,9 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $animals->cards()->createMany([
-            ['order' => 1, 'term' => 'dog', 'meaning' => 'con chó', 'ipa' => '/dɒg/'],
-            ['order' => 2, 'term' => 'cat', 'meaning' => 'con mèo', 'ipa' => '/kæt/'],
-            ['order' => 3, 'term' => 'bird', 'meaning' => 'con chim', 'ipa' => '/bɜːrd/'],
+            ['order' => 1, 'term' => 'dog', 'meaning' => 'con chó', 'pos' => 'n.', 'ipa' => '/dɒg/', 'example' => 'The *dog* is playing in the garden.'],
+            ['order' => 2, 'term' => 'cat', 'meaning' => 'con mèo', 'pos' => 'n.', 'ipa' => '/kæt/', 'example' => 'The *cat* is sleeping on the chair.'],
+            ['order' => 3, 'term' => 'bird', 'meaning' => 'con chim', 'pos' => 'n.', 'ipa' => '/bɜːrd/', 'example' => 'A *bird* is singing in the tree.'],
         ]);
 
         $colors = Deck::create([
@@ -79,9 +79,9 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $colors->cards()->createMany([
-            ['order' => 1, 'term' => 'red', 'meaning' => 'màu đỏ', 'ipa' => '/red/'],
-            ['order' => 2, 'term' => 'blue', 'meaning' => 'màu xanh dương', 'ipa' => '/bluː/'],
-            ['order' => 3, 'term' => 'green', 'meaning' => 'màu xanh lá', 'ipa' => '/griːn/'],
+            ['order' => 1, 'term' => 'red', 'meaning' => 'màu đỏ', 'pos' => 'adj.', 'ipa' => '/red/', 'example' => 'She is wearing a *red* dress.'],
+            ['order' => 2, 'term' => 'blue', 'meaning' => 'màu xanh dương', 'pos' => 'adj.', 'ipa' => '/bluː/', 'example' => 'The sky is bright *blue* today.'],
+            ['order' => 3, 'term' => 'green', 'meaning' => 'màu xanh lá', 'pos' => 'adj.', 'ipa' => '/griːn/', 'example' => 'The leaves turn *green* in spring.'],
         ]);
 
         $this->seedSampleTest($teacher);
