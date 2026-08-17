@@ -92,6 +92,7 @@ class DatabaseSeeder extends Seeder
         $this->call(DocumentCategoriesSeeder::class);
         $this->call(VocabularyCategoryDemoSeeder::class);
         $this->call(SystemBrandingSeeder::class);
+        $this->call(ArticleDemoSeeder::class);
     }
 
     /**

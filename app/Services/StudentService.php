@@ -3,15 +3,35 @@
 namespace App\Services;
 
 use App\Enums\UserRole;
+use App\Imports\StudentsImport;
 use App\Models\Classroom;
 use App\Models\User;
+use App\Repositories\ClassroomRepository;
+use App\Repositories\StudentRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Maatwebsite\Excel\Facades\Excel;
 
 class StudentService
 {
+    public function __construct(private readonly ClassroomRepository $classrooms, private readonly StudentRepository $students) {}
+
+    public function classroomStudents(Classroom $classroom)
+    {
+        return $this->classrooms->students($classroom);
+    }
+
+    public function attachToClassroom(Classroom $classroom, array $ids): void
+    {
+        $this->classrooms->attachStudents($classroom, $ids);
+    }
+
+    public function detachFromClassroom(Classroom $classroom, int $id): void
+    {
+        $this->classrooms->detachStudent($classroom, $id);
+    }
+
     /** Ký tự dễ nhầm bị loại khỏi mật khẩu tạm. */
     private const AMBIGUOUS = ['l', '1', 'I', 'O', '0', 'o'];
 
@@ -22,28 +42,7 @@ class StudentService
      */
     public function list(array $filters): LengthAwarePaginator
     {
-        $sort = in_array($filters['sort'] ?? '', ['name', 'email', 'created_at'], true)
-            ? $filters['sort'] : 'created_at';
-        $dir = ($filters['dir'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
-
-        return User::query()
-            ->where('role', UserRole::Student)
-            ->when(! empty($filters['trashed']), fn ($q) => $q->onlyTrashed())
-            ->when($filters['q'] ?? null, function ($q, $term) {
-                $q->where(function ($sub) use ($term) {
-                    $sub->where('name', 'like', "%{$term}%")
-                        ->orWhere('email', 'like', "%{$term}%")
-                        ->orWhere('phone', 'like', "%{$term}%");
-                });
-            })
-            ->when(isset($filters['is_active']) && $filters['is_active'] !== null && $filters['is_active'] !== '',
-                fn ($q) => $q->where('is_active', filter_var($filters['is_active'], FILTER_VALIDATE_BOOLEAN)))
-            ->when($filters['classroom_id'] ?? null, fn ($q, $id) => $q->whereHas('classes', fn ($c) => $c->where('classrooms.id', $id)))
-            ->with('classes:id,name')
-            ->withCount(['testAttempts as in_progress_attempts_count' => fn ($q) => $q->where('status', 'in_progress')])
-            ->orderBy($sort, $dir)
-            ->paginate((int) ($filters['per_page'] ?? 15))
-            ->withQueryString();
+        return $this->students->paginate($filters);
     }
 
     /**
@@ -56,26 +55,18 @@ class StudentService
     {
         $password = $this->generatePassword();
 
-        $user = DB::transaction(function () use ($data, $password) {
-            $user = User::create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'password' => Hash::make($password),
-                'role' => UserRole::Student,
-                'phone' => $data['phone'] ?? null,
-                'note' => $data['note'] ?? null,
-                'avatar_url' => $data['avatar_url'] ?? null,
-                'is_active' => true,
-            ]);
+        $user = $this->students->create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => Hash::make($password),
+            'role' => UserRole::Student,
+            'phone' => $data['phone'] ?? null,
+            'note' => $data['note'] ?? null,
+            'avatar_url' => $data['avatar_url'] ?? null,
+            'is_active' => true,
+        ], $data['classroom_ids'] ?? []);
 
-            if (! empty($data['classroom_ids'])) {
-                $this->syncClasses($user, $data['classroom_ids']);
-            }
-
-            return $user;
-        });
-
-        return ['user' => $user->load('classes:id,name'), 'password' => $password];
+        return ['user' => $user, 'password' => $password];
     }
 
     /**
@@ -83,36 +74,27 @@ class StudentService
      */
     public function update(User $student, array $data): User
     {
-        DB::transaction(function () use ($student, $data) {
-            $student->fill(array_filter(
-                ['name' => $data['name'] ?? null, 'phone' => $data['phone'] ?? null, 'note' => $data['note'] ?? null, 'avatar_url' => $data['avatar_url'] ?? null],
-                fn ($v, $k) => array_key_exists($k, $data),
-                ARRAY_FILTER_USE_BOTH,
-            ));
-            $student->save();
+        $attributes = array_filter(
+            ['name' => $data['name'] ?? null, 'phone' => $data['phone'] ?? null, 'note' => $data['note'] ?? null, 'avatar_url' => $data['avatar_url'] ?? null],
+            fn ($v, $k) => array_key_exists($k, $data),
+            ARRAY_FILTER_USE_BOTH,
+        );
 
-            if (array_key_exists('classroom_ids', $data)) {
-                $this->syncClasses($student, $data['classroom_ids'] ?? []);
-            }
-        });
-
-        return $student->load('classes:id,name');
+        return $this->students->update($student, $attributes, array_key_exists('classroom_ids', $data) ? ($data['classroom_ids'] ?? []) : null);
     }
 
     /** Đặt lại mật khẩu → trả plaintext tạm 1 lần. */
     public function resetPassword(User $student): string
     {
         $password = $this->generatePassword();
-        $student->forceFill(['password' => Hash::make($password)])->save();
+        $this->students->updateFields($student, ['password' => Hash::make($password)]);
 
         return $password;
     }
 
     public function setStatus(User $student, bool $isActive): User
     {
-        $student->update(['is_active' => $isActive]);
-
-        return $student;
+        return $this->students->updateFields($student, ['is_active' => $isActive]);
     }
 
     /**
@@ -124,9 +106,9 @@ class StudentService
         $ids = $data['ids'];
 
         return match ($data['action']) {
-            'lock' => User::whereIn('id', $ids)->update(['is_active' => false]),
-            'unlock' => User::whereIn('id', $ids)->update(['is_active' => true]),
-            'delete' => User::whereIn('id', $ids)->delete(),
+            'lock' => $this->students->bulkUpdate($ids, ['is_active' => false]),
+            'unlock' => $this->students->bulkUpdate($ids, ['is_active' => true]),
+            'delete' => $this->students->bulkDelete($ids),
             'assign_class' => $this->assignClass($ids, (int) $data['classroom_id'], $data['mode'] ?? 'add'),
             default => 0,
         };
@@ -137,23 +119,7 @@ class StudentService
      */
     public function assignClass(array $ids, int $classroomId, string $mode): int
     {
-        $classroom = Classroom::findOrFail($classroomId);
-
-        DB::transaction(function () use ($ids, $classroom, $mode) {
-            foreach ($ids as $id) {
-                $student = User::find($id);
-                if (! $student) {
-                    continue;
-                }
-                if ($mode === 'move') {
-                    // Gỡ khỏi mọi lớp cũ (nhiệm vụ đã giao KHÔNG bị huỷ).
-                    $student->classes()->detach();
-                }
-                $student->classes()->syncWithoutDetaching([$classroom->id => ['status' => 'studying']]);
-            }
-        });
-
-        return count($ids);
+        return $this->students->assignClass($ids, $classroomId, $mode);
     }
 
     /**
@@ -185,7 +151,7 @@ class StudentService
             $status = 'ok';
             if ($reasons) {
                 $status = 'error';
-            } elseif (in_array($email, $seenEmails, true) || User::withTrashed()->where('email', $email)->exists()) {
+            } elseif (in_array($email, $seenEmails, true) || $this->students->emailExists($email)) {
                 $status = 'duplicate';
                 $reasons[] = 'Email đã tồn tại';
             }
@@ -221,11 +187,11 @@ class StudentService
         $created = [];
         $updated = 0;
 
-        DB::transaction(function () use ($preview, $rows, $onDuplicate, &$created, &$updated) {
+        $this->students->transaction(function () use ($preview, $rows, $onDuplicate, &$created, &$updated) {
             foreach ($preview['rows'] as $idx => $line) {
                 $classroomIds = [];
                 if (! empty($line['class'])) {
-                    $classroom = Classroom::where('name', $line['class'])->first();
+                    $classroom = $this->students->classroomByName($line['class']);
                     if ($classroom) {
                         $classroomIds[] = $classroom->id;
                     }
@@ -240,16 +206,14 @@ class StudentService
                     ]);
                     $created[] = ['email' => $line['email'], 'password' => $result['password']];
                 } elseif ($line['status'] === 'duplicate' && $onDuplicate === 'update') {
-                    $existing = User::where('email', $line['email'])->first();
+                    $existing = $this->students->findByEmail($line['email']);
                     if ($existing) {
-                        $existing->update([
+                        $this->students->updateFields($existing, [
                             'name' => $line['name'] ?: $existing->name,
                             'phone' => $rows[$idx]['phone'] ?? $existing->phone,
                         ]);
                         if ($classroomIds !== []) {
-                            $existing->classes()->syncWithoutDetaching(
-                                collect($classroomIds)->mapWithKeys(fn ($id) => [$id => ['status' => 'studying']])->all()
-                            );
+                            $this->classrooms->attachStudents($classroom, [$existing->id]);
                         }
                         $updated++;
                     }
@@ -271,13 +235,31 @@ class StudentService
     /**
      * @param  array<int>  $classroomIds
      */
-    private function syncClasses(User $student, array $classroomIds): void
+    public function resolve(int $id, bool $withTrashed = false): User
     {
-        $payload = collect($classroomIds)->mapWithKeys(
-            fn ($id) => [$id => ['status' => 'studying']]
-        )->all();
+        return $this->students->resolve($id, $withTrashed);
+    }
 
-        $student->classes()->sync($payload);
+    public function delete(User $student, bool $force): void
+    {
+        $this->students->delete($student, $force);
+    }
+
+    public function restore(User $student): User
+    {
+        return $this->students->restore($student);
+    }
+
+    public function emailAvailable(string $email, ?int $ignoreId): bool
+    {
+        return ! $this->students->emailExists($email, $ignoreId);
+    }
+
+    public function importFile(UploadedFile $file, bool $dryRun, string $onDuplicate): array
+    {
+        $rows = Excel::toArray(new StudentsImport, $file)[0] ?? [];
+
+        return $dryRun ? $this->previewImport($rows) : $this->commitImport($rows, $onDuplicate);
     }
 
     /** Mật khẩu tạm 10 ký tự, bỏ ký tự dễ nhầm. */

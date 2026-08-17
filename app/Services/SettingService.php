@@ -2,13 +2,15 @@
 
 namespace App\Services;
 
-use App\Models\Setting;
 use App\Models\SettingChange;
+use App\Repositories\SettingRepository;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class SettingService
@@ -16,6 +18,8 @@ class SettingService
     private const CACHE_KEY = 'app.settings.all';
 
     public const SECRET_MASK = '••••••••';
+
+    public function __construct(private readonly SettingRepository $repository) {}
 
     /** Toàn bộ schema (nhóm + field) từ config/appsettings.php. */
     public function schema(): array
@@ -46,7 +50,7 @@ class SettingService
     {
         return Cache::rememberForever(self::CACHE_KEY, function () {
             $fields = $this->fields();
-            $rows = Setting::pluck('value', 'key');
+            $rows = $this->repository->values();
 
             $out = [];
             foreach ($fields as $key => $meta) {
@@ -73,50 +77,27 @@ class SettingService
     public function set(array $kv): array
     {
         $fields = $this->fields();
-        $clean = [];
-
-        // Lọc: bỏ readonly; bỏ secret khi để trống / còn là chuỗi che (giữ nguyên).
-        foreach ($kv as $key => $value) {
-            $meta = $fields[$key] ?? null;
-            if (! $meta || ! empty($meta['readonly'])) {
-                continue;
-            }
-            if (! empty($meta['secret']) && ($value === '' || $value === null || $value === self::SECRET_MASK)) {
-                continue; // gửi rỗng/che = giữ nguyên
-            }
-            $clean[$key] = $value;
-        }
+        $clean = $this->filterWritableValues($kv);
 
         $this->guardMailEnable($clean);
-
-        // Validate theo rule của từng field.
-        $rules = [];
-        foreach ($clean as $key => $value) {
-            $meta = $fields[$key];
-            $rules[$key] = $this->rulesFor($meta);
-        }
-        Validator::make($clean, $rules, [], $this->attributeNames($clean))->validate();
 
         $current = $this->all();
         $userId = Auth::id();
 
-        DB::transaction(function () use ($clean, $fields, $current, $userId) {
+        $this->repository->transaction(function () use ($clean, $fields, $current, $userId) {
             foreach ($clean as $key => $value) {
                 $meta = $fields[$key];
                 $oldValue = $current[$key] ?? ($meta['default'] ?? null);
 
                 if ($this->equalsDefault($value, $meta)) {
-                    Setting::where('key', $key)->delete();
+                    $this->repository->delete($key);
                 } else {
-                    Setting::updateOrCreate(
-                        ['key' => $key],
-                        [
-                            'value' => $this->serializeForStorage($value, $meta),
-                            'type' => $meta['type'],
-                            'group' => $this->groupOf($key),
-                            'updated_by' => $userId,
-                        ]
-                    );
+                    $this->repository->upsert($key, [
+                        'value' => $this->serializeForStorage($value, $meta),
+                        'type' => $meta['type'],
+                        'group' => $this->groupOf($key),
+                        'updated_by' => $userId,
+                    ]);
                 }
 
                 $this->logChange($key, $oldValue, $value, $meta, $userId);
@@ -137,14 +118,14 @@ class SettingService
         $current = $this->all();
         $userId = Auth::id();
 
-        DB::transaction(function () use ($keys, $fields, $current, $userId) {
+        $this->repository->transaction(function () use ($keys, $fields, $current, $userId) {
             foreach ($keys as $key) {
                 $meta = $fields[$key] ?? null;
                 if (! $meta) {
                     continue;
                 }
                 $old = $current[$key] ?? null;
-                Setting::where('key', $key)->delete();
+                $this->repository->delete($key);
                 if (! $this->valuesEqual($old, $meta['default'] ?? null, $meta)) {
                     $this->logChange($key, $old, $meta['default'] ?? null, $meta, $userId);
                 }
@@ -163,10 +144,12 @@ class SettingService
     /** Đánh dấu email đã gửi thử thành công (mở khoá bật email). */
     public function markMailVerified(): void
     {
-        Setting::updateOrCreate(
-            ['key' => 'mail.verified_at'],
-            ['value' => now()->toISOString(), 'type' => 'string', 'group' => 'mail', 'updated_by' => Auth::id()]
-        );
+        $this->repository->upsert('mail.verified_at', [
+            'value' => now()->toISOString(),
+            'type' => 'string',
+            'group' => 'mail',
+            'updated_by' => Auth::id(),
+        ]);
         $this->flush();
     }
 
@@ -175,7 +158,241 @@ class SettingService
         Cache::forget(self::CACHE_KEY);
     }
 
+    public function indexPayload(): array
+    {
+        $values = $this->all();
+        $groups = [];
+        foreach ($this->schema() as $groupKey => $group) {
+            $fields = [];
+            foreach ($group['fields'] as $key => $meta) {
+                $fields[] = $this->presentField($key, $meta, $values[$key] ?? ($meta['default'] ?? null));
+            }
+            $groups[] = [
+                'key' => $groupKey,
+                'label' => $group['label'],
+                'desc' => $group['desc'] ?? '',
+                'icon' => $group['icon'] ?? 'settings',
+                'fields' => $fields,
+            ];
+        }
+
+        return [
+            'groups' => $groups,
+            'meta' => [
+                'last_saved_at' => $this->repository->lastUpdatedAt(),
+                'mail_verified' => (bool) $this->get('mail.verified_at'),
+            ],
+        ];
+    }
+
+    public function updateSettings(array $values): array
+    {
+        $oldFiles = $this->currentFileValues();
+        $saved = $this->set($values);
+        $this->cleanupReplacedFiles($oldFiles);
+
+        return $saved;
+    }
+
+    public function resetSettings(array $data): void
+    {
+        $oldFiles = $this->currentFileValues();
+        if (! empty($data['group'])) {
+            $this->resetGroup($data['group']);
+        } else {
+            $this->reset($data['keys']);
+        }
+        $this->cleanupReplacedFiles($oldFiles);
+    }
+
+    public function uploadFile(UploadedFile $file): string
+    {
+        $path = $file->store('branding', 'public');
+
+        return asset('storage/'.$path);
+    }
+
+    public function deleteFile(string $key): void
+    {
+        $this->deleteBrandingFile($this->get($key));
+        $this->reset([$key]);
+    }
+
+    public function changesPayload(): array
+    {
+        $fields = $this->fields();
+        $paginator = $this->repository->changes();
+        $data = collect($paginator->items())->map(fn (SettingChange $change) => [
+            'id' => $change->id,
+            'setting_key' => $change->setting_key,
+            'label' => $fields[$change->setting_key]['label'] ?? $change->setting_key,
+            'old_value' => $change->old_value,
+            'new_value' => $change->new_value,
+            'changed_by' => $change->changedBy?->name,
+            'created_at' => $change->created_at,
+            'revertible' => isset($fields[$change->setting_key]) && empty($fields[$change->setting_key]['secret']),
+        ]);
+
+        return [
+            'data' => $data,
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'total' => $paginator->total(),
+            ],
+        ];
+    }
+
+    public function revert(SettingChange $change): void
+    {
+        $meta = $this->field($change->setting_key);
+        abort_unless($meta, 404);
+        abort_if(! empty($meta['secret']), 422, 'Không thể hoàn tác giá trị được mã hoá.');
+        $this->set([$change->setting_key => $this->coerce($change->old_value, $meta)]);
+    }
+
+    public function sendTestMail(array $data): array
+    {
+        $cfg = $this->resolveMailConfig($data['config'] ?? []);
+        config()->set('mail.mailers.settings_test', [
+            'transport' => 'smtp',
+            'host' => $cfg['host'],
+            'port' => $cfg['port'],
+            'encryption' => $cfg['encryption'] === 'none' ? null : $cfg['encryption'],
+            'username' => $cfg['username'] ?: null,
+            'password' => $cfg['password'] ?: null,
+            'timeout' => 10,
+        ]);
+
+        try {
+            Mail::mailer('settings_test')->raw(
+                'Đây là email thử từ hệ thống '.($this->get('brand.center_name') ?? 'Anh ngữ Mrs Uyên').'. Nếu em nhận được thư này nghĩa là cấu hình gửi email đã đúng.',
+                function ($message) use ($data, $cfg): void {
+                    $message->to($data['to'])
+                        ->subject('[Thử] Cấu hình email đã hoạt động')
+                        ->from($cfg['from_address'] ?: $cfg['username'], $cfg['from_name'] ?: 'Anh ngữ Mrs Uyên');
+                }
+            );
+        } catch (\Throwable $exception) {
+            return ['ok' => false, 'message' => $exception->getMessage()];
+        }
+
+        $this->markMailVerified();
+
+        return ['ok' => true, 'message' => 'Đã gửi email thử thành công.'];
+    }
+
+    public function publicBranding(): array
+    {
+        return [
+            'center_name' => $this->get('brand.center_name'),
+            'primary_color' => $this->get('brand.primary_color'),
+            'admin' => [
+                'logo' => $this->get('brand.admin.logo'),
+                'favicon' => $this->get('brand.admin.favicon'),
+                'tab_title' => $this->get('brand.admin.tab_title'),
+            ],
+            'student' => [
+                'logo' => $this->get('brand.student.logo'),
+                'favicon' => $this->get('brand.student.favicon'),
+                'tab_title' => $this->get('brand.student.tab_title'),
+                'pwa_icon' => $this->get('brand.student.pwa_icon'),
+                'banner' => $this->get('brand.student.banner'),
+                'login_cover' => $this->get('brand.student.login_cover'),
+            ],
+            'maintenance' => (bool) $this->get('system.maintenance'),
+        ];
+    }
+
     // ── Nội bộ ────────────────────────────────────────────────────────────
+
+    private function presentField(string $key, array $meta, mixed $value): array
+    {
+        $field = [
+            'key' => $key,
+            'label' => $meta['label'],
+            'hint' => $meta['hint'] ?? '',
+            'type' => $meta['type'],
+            'value' => ! empty($meta['secret']) ? ($value ? self::SECRET_MASK : '') : $value,
+            'default' => $meta['default'] ?? null,
+            'required' => (bool) ($meta['required'] ?? false),
+            'readonly' => (bool) ($meta['readonly'] ?? false),
+            'secret' => (bool) ($meta['secret'] ?? false),
+        ];
+        foreach (['unit', 'accept'] as $attribute) {
+            if (isset($meta[$attribute])) {
+                $field[$attribute] = $meta[$attribute];
+            }
+        }
+        if (isset($meta['options'])) {
+            $field['options'] = collect($meta['options'])
+                ->map(fn ($label, $value) => ['value' => $value, 'label' => $label])
+                ->values();
+        }
+
+        return $field;
+    }
+
+    private function currentFileValues(): array
+    {
+        $files = [];
+        foreach ($this->fields() as $key => $meta) {
+            if ($meta['type'] === 'file') {
+                $files[$key] = $this->get($key);
+            }
+        }
+
+        return $files;
+    }
+
+    private function cleanupReplacedFiles(array $oldFiles): void
+    {
+        foreach ($oldFiles as $key => $old) {
+            if ($old && $this->get($key) !== $old) {
+                $this->deleteBrandingFile($old);
+            }
+        }
+    }
+
+    private function deleteBrandingFile(?string $url): void
+    {
+        if (! $url) {
+            return;
+        }
+        $path = Str::after($url, '/storage/');
+        if ($path !== $url && Str::startsWith($path, 'branding/')) {
+            Storage::disk('public')->delete($path);
+        }
+    }
+
+    private function coerce(?string $raw, array $meta): mixed
+    {
+        if ($raw === null) {
+            return $meta['default'] ?? null;
+        }
+
+        return match ($meta['type']) {
+            'int' => (int) $raw,
+            'float' => (float) $raw,
+            'bool' => $raw === '1' || $raw === 'true',
+            'json' => json_decode($raw, true),
+            default => $raw,
+        };
+    }
+
+    private function resolveMailConfig(array $override): array
+    {
+        $config = [];
+        foreach (['host', 'port', 'encryption', 'username', 'from_name', 'from_address'] as $key) {
+            $config[$key] = $override['mail.'.$key] ?? $this->get('mail.'.$key);
+        }
+        $password = $override['mail.password'] ?? null;
+        $config['password'] = ($password && $password !== self::SECRET_MASK)
+            ? $password
+            : $this->get('mail.password');
+
+        return $config;
+    }
 
     private function guardMailEnable(array $clean): void
     {
@@ -186,36 +403,22 @@ class SettingService
         }
     }
 
-    private function rulesFor(array $meta): array
-    {
-        $rules = $meta['rules'] ?? [];
-        if (is_string($rules)) {
-            $rules = explode('|', $rules);
-        }
-        // Rule nền theo type để chặn kiểu sai ngay cả khi field không khai rule riêng.
-        $base = match ($meta['type']) {
-            'int' => ['integer'],
-            'float' => ['numeric'],
-            'bool' => ['boolean'],
-            'json' => ['array'],
-            default => ['string'],
-        };
-        if (! empty($meta['required'])) {
-            array_unshift($base, 'required');
-        } else {
-            array_unshift($base, 'nullable');
-        }
-
-        return array_values(array_unique([...$base, ...$rules]));
-    }
-
-    private function attributeNames(array $clean): array
+    public function filterWritableValues(array $values): array
     {
         $fields = $this->fields();
+        $clean = [];
+        foreach ($values as $key => $value) {
+            $meta = $fields[$key] ?? null;
+            if (! $meta || ! empty($meta['readonly'])) {
+                continue;
+            }
+            if (! empty($meta['secret']) && ($value === '' || $value === null || $value === self::SECRET_MASK)) {
+                continue;
+            }
+            $clean[$key] = $value;
+        }
 
-        return collect($clean)->keys()
-            ->mapWithKeys(fn ($k) => [$k => $fields[$k]['label'] ?? $k])
-            ->all();
+        return $clean;
     }
 
     private function groupOf(string $key): string
@@ -288,7 +491,7 @@ class SettingService
 
     private function logChange(string $key, mixed $old, mixed $new, array $meta, ?int $userId): void
     {
-        SettingChange::create([
+        $this->repository->logChange([
             'setting_key' => $key,
             'old_value' => $this->displayValue($old, $meta),
             'new_value' => $this->displayValue($new, $meta),

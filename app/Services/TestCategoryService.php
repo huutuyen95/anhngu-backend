@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Models\TestCategory;
-use Illuminate\Support\Facades\DB;
+use App\Repositories\TestCategoryRepository;
 
 class TestCategoryService
 {
     public const UNCATEGORIZED = 'Chưa phân loại';
+
+    public function __construct(private readonly TestCategoryRepository $categories) {}
 
     /**
      * Cây thư mục của một lớp (2 cấp) kèm tests_count từng nhánh.
@@ -16,13 +18,7 @@ class TestCategoryService
      */
     public function tree(?int $classroomId): array
     {
-        $roots = TestCategory::query()
-            ->where('classroom_id', $classroomId)
-            ->whereNull('parent_id')
-            ->with(['children' => fn ($q) => $q->withCount('tests')])
-            ->withCount('tests')
-            ->orderBy('order')
-            ->get();
+        $roots = $this->categories->roots($classroomId);
 
         return $roots->map(fn (TestCategory $c) => $this->node($c))->all();
     }
@@ -54,57 +50,18 @@ class TestCategoryService
      */
     public function sync(?int $classroomId, array $categories, array $deletedIds): array
     {
-        return DB::transaction(function () use ($classroomId, $categories, $deletedIds) {
-            $movedCount = 0;
+        $rows = collect($categories)->map(fn (array $row) => [
+            'id' => $row['id'] ?? null,
+            'name' => trim((string) $row['name']),
+            'parent_id' => $row['parent_id'] ?? null,
+            'order' => (int) ($row['order'] ?? 0),
+        ])->filter(fn (array $row) => $row['name'] !== '')->all();
 
-            if ($deletedIds !== []) {
-                $toDelete = TestCategory::query()
-                    ->where('classroom_id', $classroomId)
-                    ->whereIn('id', $deletedIds)
-                    ->get();
-
-                if ($toDelete->isNotEmpty()) {
-                    $fallback = $this->uncategorized($classroomId);
-                    $ids = $toDelete->pluck('id')->all();
-
-                    // Đề trong thư mục bị xoá (và trong thư mục con của nó) → dồn về "Chưa phân loại".
-                    $movedCount = \App\Models\Test::whereIn('category_id', $ids)->update(['category_id' => $fallback->id]);
-
-                    // Thư mục con của thư mục bị xoá → đưa lên gốc.
-                    TestCategory::whereIn('parent_id', $ids)->update(['parent_id' => null]);
-
-                    TestCategory::whereIn('id', $ids)->where('id', '!=', $fallback->id)->delete();
-                }
-            }
-
-            foreach ($categories as $row) {
-                $name = trim((string) ($row['name'] ?? ''));
-                if ($name === '') {
-                    continue;
-                }
-                $attrs = [
-                    'name' => $name,
-                    'classroom_id' => $classroomId,
-                    'parent_id' => $row['parent_id'] ?? null,
-                    'order' => (int) ($row['order'] ?? 0),
-                ];
-
-                if (! empty($row['id'])) {
-                    TestCategory::where('id', $row['id'])->where('classroom_id', $classroomId)->update($attrs);
-                } else {
-                    TestCategory::create($attrs);
-                }
-            }
-
-            return ['moved_count' => $movedCount];
-        });
+        return ['moved_count' => $this->categories->sync($classroomId, $rows, $deletedIds)];
     }
 
     public function uncategorized(?int $classroomId): TestCategory
     {
-        return TestCategory::firstOrCreate(
-            ['classroom_id' => $classroomId, 'name' => self::UNCATEGORIZED, 'parent_id' => null],
-            ['order' => 999],
-        );
+        return $this->categories->uncategorized($classroomId);
     }
 }

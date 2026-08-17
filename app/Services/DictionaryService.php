@@ -2,10 +2,13 @@
 
 namespace App\Services;
 
-use App\Models\IpaEntry;
+use App\Models\UserVocab;
+use App\Repositories\DictionaryRepository;
 
 class DictionaryService
 {
+    public function __construct(private readonly DictionaryRepository $dictionary) {}
+
     /** Động từ / danh từ bất quy tắc phổ biến → dạng gốc. */
     private const IRREGULAR = [
         'went' => 'go', 'gone' => 'go', 'goes' => 'go',
@@ -34,7 +37,7 @@ class DictionaryService
         }
 
         foreach ($this->candidates($word) as $cand) {
-            $entry = IpaEntry::where('word', $cand)->first();
+            $entry = $this->dictionary->findIpa($cand);
             if ($entry) {
                 return [
                     'word' => $entry->word,
@@ -47,6 +50,11 @@ class DictionaryService
         }
 
         return null;
+    }
+
+    public function saveVocab(int $userId, array $data): UserVocab
+    {
+        return $this->dictionary->saveVocab($userId, $data);
     }
 
     /**

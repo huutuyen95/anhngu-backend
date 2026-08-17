@@ -6,7 +6,7 @@ use App\Models\Mission;
 use App\Models\Test;
 use App\Models\TestAttempt;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
+use App\Repositories\AttemptRepository;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -24,6 +24,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 class AttemptStartService
 {
+    public function __construct(private readonly AttemptRepository $attempts) {}
+
     public function start(User $student, Test $test, ?int $missionId): TestAttempt
     {
         $mission = $missionId ? $this->resolveMission($student, $test, $missionId) : null;
@@ -32,26 +34,16 @@ class AttemptStartService
             $this->assertAttemptsLeft($mission);
         }
 
-        return DB::transaction(function () use ($student, $test, $mission) {
+        return $this->attempts->transaction(function () use ($student, $test, $mission) {
             // Dọn lượt đang làm dở CÙNG NGUỒN (nếu có). Lượt dở ở nguồn kia phải giữ nguyên —
             // mở đề ở thư viện không được xoá bài đang làm dở của lớp.
-            $stale = TestAttempt::query()
-                ->where('user_id', $student->id)
-                ->where('test_id', $test->id)
-                ->where('status', 'in_progress')
-                ->when(
-                    $mission,
-                    fn ($q) => $q->where('mission_id', $mission->id),
-                    fn ($q) => $q->whereNull('mission_id'),
-                )
-                ->first();
+            $stale = $this->attempts->staleAttempt($student, $test, $mission);
 
             if ($stale) {
-                $stale->answers()->delete();
-                $stale->delete();
+                $this->attempts->deleteAttemptWithAnswers($stale);
             }
 
-            return TestAttempt::create([
+            return $this->attempts->create([
                 'user_id' => $student->id,
                 'test_id' => $test->id,
                 'mission_id' => $mission?->id,
@@ -63,7 +55,7 @@ class AttemptStartService
                 // không phải mốc hết giờ tuyệt đối. Đề không giới hạn giờ thì để null.
                 'remaining_seconds' => $test->duration_minutes > 0 ? $test->duration_minutes * 60 : null,
                 'resumed_at' => $test->duration_minutes > 0 ? now() : null,
-                'question_count' => $test->questionCount(),
+                'question_count' => $this->attempts->questionCount($test),
                 // Chụp cấu hình lúc bắt đầu — đổi cấu hình giữa chừng không ảnh hưởng lượt này.
                 'config_snapshot' => [
                     'exam.leave_limit' => (int) setting('exam.leave_limit', 3),
@@ -85,12 +77,7 @@ class AttemptStartService
      */
     private function resolveMission(User $student, Test $test, int $missionId): Mission
     {
-        $mission = Mission::query()
-            ->where('id', $missionId)
-            ->where('user_id', $student->id)
-            ->where('missionable_type', $test->getMorphClass())
-            ->where('missionable_id', $test->id)
-            ->first();
+        $mission = $this->attempts->findMission($student, $test, $missionId);
 
         if (! $mission || $mission->status === 'draft') {
             throw new HttpException(404, 'Không tìm thấy nhiệm vụ này.');
@@ -108,7 +95,7 @@ class AttemptStartService
     /** Bài giao mặc định chỉ được làm 1 lần — xem Mission::attemptsUsed(). */
     private function assertAttemptsLeft(Mission $mission): void
     {
-        if ($mission->hasAttemptsLeft()) {
+        if ($this->attempts->missionHasAttemptsLeft($mission)) {
             return;
         }
 

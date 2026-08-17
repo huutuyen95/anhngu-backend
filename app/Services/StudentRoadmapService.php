@@ -3,16 +3,13 @@
 namespace App\Services;
 
 use App\Enums\Skill;
-use App\Models\CardProgress;
 use App\Models\Classroom;
 use App\Models\Deck;
 use App\Models\Document;
-use App\Models\DocumentView;
 use App\Models\Mission;
-use App\Models\SessionAttendance;
 use App\Models\Test;
-use App\Models\TestAttempt;
 use App\Models\User;
+use App\Repositories\StudentRoadmapRepository;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 
@@ -22,7 +19,10 @@ use Illuminate\Support\Carbon;
  */
 class StudentRoadmapService
 {
-    public function __construct(private readonly ClassroomStatsService $classStats) {}
+    public function __construct(
+        private readonly ClassroomStatsService $classStats,
+        private readonly StudentRoadmapRepository $roadmaps,
+    ) {}
 
     /** Danh sách lớp học sinh đang tham gia (dữ liệu card màn chọn lớp). */
     public function myClassrooms(User $student): array
@@ -31,33 +31,13 @@ class StudentRoadmapService
         $dueSoonLimit = now()->addDays(3)->endOfDay();
         $statusRank = ['active' => 0, 'upcoming' => 1, 'ended' => 2];
 
-        return $student->classes()
-            ->with('teacher:id,name')
-            ->get()
+        return $this->roadmaps->classrooms($student)
             ->map(function (Classroom $c) use ($student, $today, $dueSoonLimit) {
                 // Nhiệm vụ được giao cho em trong lớp (bỏ nháp). status='done' do các luồng
                 // nộp bài / học deck / xem tài liệu tự set → đếm theo đó là chuẩn.
-                $missions = Mission::where('classroom_id', $c->id)
-                    ->where('user_id', $student->id)
-                    ->where('status', '!=', 'draft');
-
-                $total = (clone $missions)->count();
-                $done = (clone $missions)->where('status', 'done')->count();
-                $dueSoon = (clone $missions)->where('status', '!=', 'done')
-                    ->whereNotNull('due_date')
-                    ->whereBetween('due_date', [$today, $dueSoonLimit])
-                    ->count();
-
-                // Điểm TB: chỉ bài cô giao đã có điểm (chờ chấm không tính).
-                $avg = TestAttempt::where('classroom_id', $c->id)
-                    ->where('user_id', $student->id)
-                    ->whereNotNull('mission_id')
-                    ->whereIn('status', ['submitted', 'graded'])
-                    ->whereNotNull('total_score')
-                    ->avg('total_score');
-
-                $lastActivity = (clone $missions)->max('completed_at')
-                    ?? (clone $missions)->max('updated_at');
+                $metrics = $this->roadmaps->classroomMetrics($c, $student, $today, $dueSoonLimit);
+                $total = $metrics['total'];
+                $done = $metrics['done'];
 
                 return [
                     'id' => $c->id,
@@ -65,7 +45,7 @@ class StudentRoadmapService
                     'code' => $this->classCode($c->name),
                     'cover_url' => $c->cover_url,
                     'teacher_name' => $c->teacher?->name,
-                    'students_count' => $c->students()->count(),
+                    'students_count' => $c->students_count,
                     'schedule_text' => null, // chưa có cột lịch học trong classrooms
                     'starts_on' => $c->starts_on?->toDateString(),
                     'ends_on' => $c->ends_on?->toDateString(),
@@ -74,9 +54,9 @@ class StudentRoadmapService
                     'done_count' => $done,
                     'total_count' => $total,
                     'todo_count' => $total - $done,
-                    'due_soon_count' => $dueSoon,
-                    'avg_score' => $avg !== null ? round((float) $avg, 1) : null,
-                    'last_activity_at' => $lastActivity,
+                    'due_soon_count' => $metrics['due_soon'],
+                    'avg_score' => $metrics['average'] !== null ? round((float) $metrics['average'], 1) : null,
+                    'last_activity_at' => $metrics['last_activity'],
                     // giữ tương thích màn cũ
                     'my_progress_pct' => $total > 0 ? (int) round($done / $total * 100) : 0,
                 ];
@@ -115,22 +95,14 @@ class StudentRoadmapService
     /** Lộ trình đầy đủ của một lớp cho học sinh. */
     public function roadmap(Classroom $classroom, User $student): array
     {
-        $sessions = $classroom->sessions()
-            ->where('is_visible', true)
-            ->orderBy('order')
-            ->get();
+        $classroom = $this->roadmaps->loadClassroom($classroom);
+        $sessions = $this->roadmaps->visibleSessions($classroom);
 
         $sessionIds = $sessions->pluck('id');
         $today = now()->startOfDay();
 
         // Missions của em trong lớp (bỏ nháp + lịch chưa tới giờ), kèm nội dung.
-        $missions = Mission::where('classroom_id', $classroom->id)
-            ->where('user_id', $student->id)
-            ->whereIn('class_session_id', $sessionIds)
-            ->where('status', '!=', 'draft')
-            ->where(fn ($q) => $q->whereNull('scheduled_at')->orWhere('scheduled_at', '<=', now()))
-            ->with('missionable')
-            ->get();
+        $missions = $this->roadmaps->missions($classroom, $student, $sessionIds);
 
         // Nạp trước dữ liệu tiến độ để tránh N+1.
         $docIds = $missions->filter(fn ($m) => $m->missionable instanceof Document)->pluck('missionable_id');
@@ -138,15 +110,9 @@ class StudentRoadmapService
 
         // Gom theo MISSION chứ không theo test: lượt em tự luyện cùng đề đó ở Thư viện
         // (mission_id = null) không được tính là đã làm bài cô giao.
-        $attempts = TestAttempt::where('user_id', $student->id)
-            ->whereIn('mission_id', $missions->pluck('id'))
-            ->get()
-            ->groupBy('mission_id');
+        $attempts = $this->roadmaps->attempts($student, $missions->pluck('id'));
 
-        $views = DocumentView::where('user_id', $student->id)
-            ->whereIn('document_id', $docIds)
-            ->get()
-            ->keyBy('document_id');
+        $views = $this->roadmaps->documentViews($student, $docIds);
 
         $deckProgress = $this->deckProgress($student, $deckModels, $classroom);
         $completePct = (int) setting('content.deck_complete_pct', 80) / 100;
@@ -183,7 +149,7 @@ class StudentRoadmapService
                 'code' => $this->classCode($classroom->name),
                 'description' => $classroom->description,
                 'teacher_name' => $classroom->teacher?->name,
-                'students_count' => $classroom->students()->count(),
+                'students_count' => $this->roadmaps->studentCount($classroom),
                 'starts_on' => $classroom->starts_on?->toDateString(),
                 'ends_on' => $classroom->ends_on?->toDateString(),
                 'status' => $classroom->status(),
@@ -201,21 +167,7 @@ class StudentRoadmapService
      */
     private function deckProgress(User $student, $decks, Classroom $classroom): array
     {
-        $out = [];
-        foreach ($decks as $deck) {
-            $cardIds = $deck->cards()->pluck('id');
-            $total = $cardIds->count();
-            $known = $total > 0
-                ? CardProgress::where('user_id', $student->id)
-                    ->whereIn('card_id', $cardIds)
-                    ->where('classroom_id', $classroom->id)
-                    ->where('status', 'known')
-                    ->count()
-                : 0;
-            $out[$deck->id] = ['known' => $known, 'total' => $total];
-        }
-
-        return $out;
+        return $this->roadmaps->deckProgress($student, collect($decks), $classroom);
     }
 
     private function buildItem(Mission $mission, $attempts, $views, array $deckProgress, float $completePct, Carbon $today): array
@@ -303,7 +255,7 @@ class StudentRoadmapService
             return ['document', $model->title, $label.$mins];
         }
         if ($model instanceof Deck) {
-            $count = $model->cards()->count();
+            $count = $this->roadmaps->deckCardCount($model);
 
             return ['deck', $model->name, "{$count} thẻ từ"];
         }
@@ -320,7 +272,7 @@ class StudentRoadmapService
                 default => 'Trắc nghiệm',
             };
 
-            return ['test', $model->title, $skillLabel." · {$model->questionCount()} câu"];
+            return ['test', $model->title, $skillLabel.' · '.$this->roadmaps->testQuestionCount($model).' câu'];
         }
 
         return ['document', 'Nội dung', ''];
@@ -333,25 +285,15 @@ class StudentRoadmapService
 
         // Chỉ điểm bài cô giao trong lớp này (mission_id != null) — điểm tự luyện ở Thư viện
         // không được kéo điểm TB của lớp lên/xuống.
-        $myAvg = TestAttempt::where('classroom_id', $classroom->id)
-            ->where('user_id', $student->id)
-            ->whereNotNull('mission_id')
-            ->whereIn('status', ['submitted', 'graded'])
-            ->whereNotNull('total_score')
-            ->avg('total_score');
-
-        $attended = SessionAttendance::where('user_id', $student->id)
-            ->whereIn('class_session_id', $sessionIds)
-            ->where('status', 'present')
-            ->count();
+        $studentStats = $this->roadmaps->studentStats($classroom, $student, collect($sessionIds));
 
         return [
             'my_progress_pct' => $totalCount > 0 ? (int) round($doneCount / $totalCount * 100) : 0,
             'done_count' => $doneCount,
             'total_count' => $totalCount,
-            'my_avg_score' => $myAvg !== null ? round((float) $myAvg, 1) : null,
+            'my_avg_score' => $studentStats['average'] !== null ? round((float) $studentStats['average'], 1) : null,
             'class_avg_score' => $this->classStats->forClass($classroom)['avg_score'] ?? null,
-            'attended_sessions' => $attended,
+            'attended_sessions' => $studentStats['attended'],
             'total_sessions' => $sessionIds->count(),
         ];
     }
