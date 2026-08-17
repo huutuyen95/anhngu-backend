@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Article\ListStudentArticlesRequest;
 use App\Http\Resources\ArticleResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Article;
 use App\Services\StudentArticleService;
 use Illuminate\Http\JsonResponse;
@@ -15,9 +16,7 @@ class StudentArticleController extends Controller
 
     public function index(ListStudentArticlesRequest $request): JsonResponse
     {
-        return response()->json([
-            'data' => ArticleResource::collection($this->articles->list($request->validated())),
-        ]);
+        return ApiResponse::collection(ArticleResource::collection($this->articles->list($request->validated())));
     }
 
     public function categories(): JsonResponse
@@ -27,6 +26,6 @@ class StudentArticleController extends Controller
 
     public function read(Article $article): JsonResponse
     {
-        return response()->json(['article' => new ArticleResource($this->articles->read($article))]);
+        return ApiResponse::resource(new ArticleResource($this->articles->read($article)), 'article');
     }
 }

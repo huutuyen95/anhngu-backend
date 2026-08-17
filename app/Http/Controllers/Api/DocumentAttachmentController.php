@@ -8,6 +8,7 @@ use App\Http\Requests\Document\ReorderAttachmentsRequest;
 use App\Http\Requests\Document\UploadAttachmentRequest;
 use App\Http\Requests\Document\UploadDocumentThumbnailRequest;
 use App\Http\Resources\AttachmentResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Document;
 use App\Models\DocumentAttachment;
 use App\Services\DocumentAttachmentService;
@@ -19,21 +20,21 @@ class DocumentAttachmentController extends Controller
 
     public function store(UploadAttachmentRequest $request, Document $document): JsonResponse
     {
-        return response()->json(['attachment' => new AttachmentResource($this->attachments->upload($document, $request->file('file')))], 201);
+        return ApiResponse::resource(new AttachmentResource($this->attachments->upload($document, $request->file('file'))), 'attachment', 201);
     }
 
     public function destroy(DocumentAttachment $attachment): JsonResponse
     {
         $this->attachments->delete($attachment);
 
-        return response()->json(['message' => 'Đã xoá file.']);
+        return ApiResponse::message('Đã xoá file.');
     }
 
     public function reorder(ReorderAttachmentsRequest $request, Document $document): JsonResponse
     {
         $this->attachments->reorder($document, $request->validated('ids'));
 
-        return response()->json(['message' => 'Đã cập nhật thứ tự.']);
+        return ApiResponse::message('Đã cập nhật thứ tự.');
     }
 
     public function bulkDelete(BulkDeleteAttachmentsRequest $request): JsonResponse

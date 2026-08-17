@@ -8,6 +8,7 @@ use App\Http\Requests\Classroom\ListClassroomsRequest;
 use App\Http\Requests\Classroom\StoreClassroomRequest;
 use App\Http\Requests\Classroom\UpdateClassroomRequest;
 use App\Http\Resources\ClassroomResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Classroom;
 use App\Services\ClassroomOverviewService;
 use App\Services\ClassroomService;
@@ -21,29 +22,21 @@ class ClassroomController extends Controller
     {
         $page = $this->classrooms->paginate($request->validated());
 
-        return response()->json([
-            'data' => ClassroomResource::collection($page->items()),
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'last_page' => $page->lastPage(),
-                'total' => $page->total(),
-            ],
-        ]);
+        return ApiResponse::paginated(ClassroomResource::collection($page->items()), $page);
     }
 
     public function store(StoreClassroomRequest $request): JsonResponse
     {
         $result = $this->classrooms->create($request->validated(), $request->user());
 
-        return response()->json([
-            'classroom' => new ClassroomResource($result['classroom']),
+        return ApiResponse::resource(new ClassroomResource($result['classroom']), 'classroom', 201, [
             'warning' => $result['warning'],
-        ], 201);
+        ]);
     }
 
     public function show(Classroom $classroom): JsonResponse
     {
-        return response()->json(['classroom' => new ClassroomResource($classroom)]);
+        return ApiResponse::resource(new ClassroomResource($classroom), 'classroom');
     }
 
     public function overview(Classroom $classroom, ClassroomOverviewService $overview): JsonResponse
@@ -55,7 +48,7 @@ class ClassroomController extends Controller
     {
         $updated = $this->classrooms->update($classroom, $request->validated());
 
-        return response()->json(['classroom' => new ClassroomResource($updated)]);
+        return ApiResponse::resource(new ClassroomResource($updated), 'classroom');
     }
 
     public function destroy(DeleteClassroomRequest $request, Classroom $classroom): JsonResponse
@@ -72,6 +65,6 @@ class ClassroomController extends Controller
 
         $this->classrooms->delete($classroom);
 
-        return response()->json(['message' => 'Đã xoá lớp học.']);
+        return ApiResponse::message('Đã xoá lớp học.');
     }
 }

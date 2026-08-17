@@ -8,6 +8,7 @@ use App\Http\Requests\Document\PublishDocumentRequest;
 use App\Http\Requests\Document\StoreDocumentRequest;
 use App\Http\Requests\Document\UpdateDocumentRequest;
 use App\Http\Resources\DocumentResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Document;
 use App\Services\DocumentService;
 use Illuminate\Http\JsonResponse;
@@ -20,28 +21,24 @@ class DocumentController extends Controller
     {
         $page = $this->documents->paginate($request->validated());
 
-        return response()->json([
-            'data' => DocumentResource::collection($page->items()),
-            'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'total' => $page->total(),
-                'per_page' => $page->perPage(), 'from' => $page->firstItem(), 'to' => $page->lastItem()],
-        ]);
+        return ApiResponse::paginated(DocumentResource::collection($page->items()), $page);
     }
 
     public function store(StoreDocumentRequest $request): JsonResponse
     {
         $document = $this->documents->detail($this->documents->create($request->validated(), $request->user()));
 
-        return response()->json(['document' => new DocumentResource($document)], 201);
+        return ApiResponse::resource(new DocumentResource($document), 'document', 201);
     }
 
     public function show(Document $document): JsonResponse
     {
-        return response()->json(['document' => new DocumentResource($this->documents->detail($document))]);
+        return ApiResponse::resource(new DocumentResource($this->documents->detail($document)), 'document');
     }
 
     public function update(UpdateDocumentRequest $request, Document $document): JsonResponse
     {
-        return response()->json(['document' => new DocumentResource($this->documents->detail($this->documents->update($document, $request->validated())))]);
+        return ApiResponse::resource(new DocumentResource($this->documents->detail($this->documents->update($document, $request->validated()))), 'document');
     }
 
     public function publish(PublishDocumentRequest $request, Document $document): JsonResponse
@@ -53,7 +50,9 @@ class DocumentController extends Controller
 
     public function destroy(Document $document): JsonResponse
     {
-        return response()->json(['message' => 'Đã xoá nội dung.', 'sessions' => $this->documents->delete($document)]);
+        return ApiResponse::message('Đã xoá nội dung.', additional: [
+            'sessions' => $this->documents->delete($document),
+        ]);
     }
 
     public function storageUsage(): JsonResponse

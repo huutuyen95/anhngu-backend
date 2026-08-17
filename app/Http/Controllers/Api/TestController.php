@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Test\ListStudentTestsRequest;
 use App\Http\Resources\StudentTestResource;
 use App\Http\Resources\TestDetailResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Test;
 use App\Services\StudentTestService;
 use Illuminate\Http\JsonResponse;
@@ -21,16 +22,11 @@ class TestController extends Controller
 
         $page = $this->tests->list($filters, $student);
 
-        return response()->json([
-            'data' => StudentTestResource::collection($page->items()),
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'last_page' => $page->lastPage(),
-                'per_page' => $page->perPage(),
-                'total' => $page->total(),
-                ...$this->tests->summary($filters, $student),
-            ],
-        ]);
+        return ApiResponse::paginated(
+            StudentTestResource::collection($page->items()),
+            $page,
+            $this->tests->summary($filters, $student),
+        );
     }
 
     public function show(Test $test)

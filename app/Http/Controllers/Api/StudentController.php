@@ -13,6 +13,7 @@ use App\Http\Requests\Student\SetStudentStatusRequest;
 use App\Http\Requests\Student\StoreStudentRequest;
 use App\Http\Requests\Student\UpdateStudentRequest;
 use App\Http\Resources\StudentResource;
+use App\Http\Responses\ApiResponse;
 use App\Services\StudentService;
 use Illuminate\Http\JsonResponse;
 use Maatwebsite\Excel\Facades\Excel;
@@ -26,25 +27,16 @@ class StudentController extends Controller
     {
         $page = $this->students->list($request->validated());
 
-        return response()->json([
-            'data' => StudentResource::collection($page->items()),
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'last_page' => $page->lastPage(),
-                'per_page' => $page->perPage(),
-                'total' => $page->total(),
-            ],
-        ]);
+        return ApiResponse::paginated(StudentResource::collection($page->items()), $page);
     }
 
     public function store(StoreStudentRequest $request): JsonResponse
     {
         $result = $this->students->create($request->validated());
 
-        return response()->json([
-            'student' => new StudentResource($result['user']),
+        return ApiResponse::resource(new StudentResource($result['user']), 'student', 201, [
             'temp_password' => $result['password'],
-        ], 201);
+        ]);
     }
 
     public function update(UpdateStudentRequest $request, int $student): JsonResponse
@@ -52,7 +44,7 @@ class StudentController extends Controller
         $model = $this->students->resolve($student);
         $updated = $this->students->update($model, $request->validated());
 
-        return response()->json(['student' => new StudentResource($updated)]);
+        return ApiResponse::resource(new StudentResource($updated), 'student');
     }
 
     public function destroy(DeleteStudentRequest $request, int $student): JsonResponse
@@ -62,19 +54,19 @@ class StudentController extends Controller
         if ($request->boolean('force')) {
             $this->students->delete($model, true);
 
-            return response()->json(['message' => 'Đã xoá vĩnh viễn.']);
+            return ApiResponse::message('Đã xoá vĩnh viễn.');
         }
 
         $this->students->delete($model, false);
 
-        return response()->json(['message' => 'Đã chuyển vào thùng rác.']);
+        return ApiResponse::message('Đã chuyển vào thùng rác.');
     }
 
     public function restore(int $student): JsonResponse
     {
         $model = $this->students->restore($this->students->resolve($student, withTrashed: true));
 
-        return response()->json(['student' => new StudentResource($model)]);
+        return ApiResponse::resource(new StudentResource($model), 'student');
     }
 
     public function status(SetStudentStatusRequest $request, int $student): JsonResponse
@@ -82,9 +74,7 @@ class StudentController extends Controller
         $data = $request->validated();
         $model = $this->students->resolve($student);
 
-        return response()->json([
-            'student' => new StudentResource($this->students->setStatus($model, $data['is_active'])),
-        ]);
+        return ApiResponse::resource(new StudentResource($this->students->setStatus($model, $data['is_active'])), 'student');
     }
 
     public function bulk(BulkStudentRequest $request): JsonResponse

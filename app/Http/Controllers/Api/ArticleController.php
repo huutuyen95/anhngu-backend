@@ -8,6 +8,7 @@ use App\Http\Requests\Article\PublishArticleRequest;
 use App\Http\Requests\Article\StoreArticleRequest;
 use App\Http\Requests\Article\UpdateArticleRequest;
 use App\Http\Resources\ArticleResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Article;
 use App\Services\ArticleService;
 use Illuminate\Http\JsonResponse;
@@ -20,33 +21,24 @@ class ArticleController extends Controller
     {
         $page = $this->articles->paginate($request->validated());
 
-        return response()->json([
-            'data' => ArticleResource::collection($page->items()),
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'last_page' => $page->lastPage(),
-                'total' => $page->total(),
-            ],
-        ]);
+        return ApiResponse::paginated(ArticleResource::collection($page->items()), $page);
     }
 
     public function store(StoreArticleRequest $request): JsonResponse
     {
         $article = $this->articles->create($request->validated(), $request->user()->id);
 
-        return response()->json(['article' => new ArticleResource($article)], 201);
+        return ApiResponse::resource(new ArticleResource($article), 'article', 201);
     }
 
     public function show(Article $article): JsonResponse
     {
-        return response()->json(['article' => new ArticleResource($this->articles->show($article))]);
+        return ApiResponse::resource(new ArticleResource($this->articles->show($article)), 'article');
     }
 
     public function update(UpdateArticleRequest $request, Article $article): JsonResponse
     {
-        return response()->json([
-            'article' => new ArticleResource($this->articles->update($article, $request->validated())),
-        ]);
+        return ApiResponse::resource(new ArticleResource($this->articles->update($article, $request->validated())), 'article');
     }
 
     public function publish(PublishArticleRequest $request, Article $article): JsonResponse
@@ -60,6 +52,6 @@ class ArticleController extends Controller
     {
         $this->articles->delete($article);
 
-        return response()->json(['message' => 'Đã xoá bài viết.']);
+        return ApiResponse::message('Đã xoá bài viết.');
     }
 }

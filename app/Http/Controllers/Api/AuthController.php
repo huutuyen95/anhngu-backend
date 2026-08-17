@@ -8,6 +8,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Requests\Auth\ResetPasswordRequest;
 use App\Http\Resources\UserResource;
+use App\Http\Responses\ApiResponse;
 use App\Services\AuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,14 +21,14 @@ class AuthController extends Controller
     {
         $result = $this->auth->register($request->validated());
 
-        return response()->json(['user' => new UserResource($result['user']), 'token' => $result['token']], 201);
+        return ApiResponse::resource(new UserResource($result['user']), 'user', 201, ['token' => $result['token']]);
     }
 
     public function login(LoginRequest $request): JsonResponse
     {
         $result = $this->auth->login((string) $request->string('email'), (string) $request->string('password'), $request->throttleKey());
 
-        return response()->json(['user' => new UserResource($result['user']), 'token' => $result['token']]);
+        return ApiResponse::resource(new UserResource($result['user']), 'user', additional: ['token' => $result['token']]);
     }
 
     public function me(Request $request): UserResource
@@ -39,20 +40,20 @@ class AuthController extends Controller
     {
         $this->auth->logout($request->user());
 
-        return response()->json(['message' => 'Đã đăng xuất.']);
+        return ApiResponse::message('Đã đăng xuất.');
     }
 
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
         $this->auth->forgotPassword((string) $request->string('email'));
 
-        return response()->json(['message' => 'Nếu email tồn tại, chúng tôi đã gửi link đặt lại mật khẩu.']);
+        return ApiResponse::message('Nếu email tồn tại, chúng tôi đã gửi link đặt lại mật khẩu.');
     }
 
     public function resetPassword(ResetPasswordRequest $request): JsonResponse
     {
         $this->auth->resetPassword($request->validated());
 
-        return response()->json(['message' => 'Đặt lại mật khẩu thành công.']);
+        return ApiResponse::message('Đặt lại mật khẩu thành công.');
     }
 }
