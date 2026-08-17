@@ -190,6 +190,35 @@ class VocabularyTest extends TestCase
         $this->assertEquals(2, Card::find($a->id)->order);
     }
 
+    public function test_teacher_can_search_card_examples_and_filter_missing_examples(): void
+    {
+        $deck = $this->makeDeck();
+        $withExample = $deck->cards()->create([
+            'order' => 1,
+            'term' => 'decision',
+            'meaning' => 'quyết định',
+            'example' => 'I need to make a decision today.',
+        ]);
+        $withoutExample = $deck->cards()->create([
+            'order' => 2,
+            'term' => 'journey',
+            'meaning' => 'chuyến đi',
+            'example' => null,
+        ]);
+
+        $this->actingAs($this->teacher)
+            ->getJson("/api/v1/decks/{$deck->id}/cards?q=make+a+decision")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $withExample->id);
+
+        $this->actingAs($this->teacher)
+            ->getJson("/api/v1/decks/{$deck->id}/cards?missing=example")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $withoutExample->id);
+    }
+
     public function test_import_dry_run_does_not_write_and_commit_autofills_ipa(): void
     {
         $this->seed(IpaDictionarySeeder::class);

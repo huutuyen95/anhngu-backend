@@ -29,11 +29,11 @@ class VocabularyCategoryDemoSeeder extends Seeder
                 'name' => 'GRADE 8 UNIT 5',
                 'category' => 'Từ vựng theo lớp',
                 'cards' => [
-                    ['term' => 'community', 'meaning' => 'cộng đồng'],
-                    ['term' => 'volunteer', 'meaning' => 'tình nguyện viên'],
-                    ['term' => 'donate', 'meaning' => 'quyên góp'],
-                    ['term' => 'elderly', 'meaning' => 'người cao tuổi'],
-                    ['term' => 'campaign', 'meaning' => 'chiến dịch'],
+                    ['term' => 'community', 'meaning' => 'cộng đồng', 'pos' => 'n.', 'ipa' => '/kəˈmjuːnəti/', 'example' => 'Our *community* works together to keep the park clean.'],
+                    ['term' => 'volunteer', 'meaning' => 'tình nguyện viên', 'pos' => 'n.', 'ipa' => '/ˌvɒlənˈtɪə(r)/', 'example' => 'Each *volunteer* helps children with their homework.'],
+                    ['term' => 'donate', 'meaning' => 'quyên góp', 'pos' => 'v.', 'ipa' => '/dəʊˈneɪt/', 'example' => 'We *donate* books to the local library every year.'],
+                    ['term' => 'elderly', 'meaning' => 'người cao tuổi', 'pos' => 'adj.', 'ipa' => '/ˈeldəli/', 'example' => 'The students visit *elderly* people at the weekend.'],
+                    ['term' => 'campaign', 'meaning' => 'chiến dịch', 'pos' => 'n.', 'ipa' => '/kæmˈpeɪn/', 'example' => 'Our school started a recycling *campaign*.'],
                 ],
             ],
             [
@@ -41,11 +41,11 @@ class VocabularyCategoryDemoSeeder extends Seeder
                 'name' => 'GIAO TIẾP HẰNG NGÀY',
                 'category' => 'Chủ đề hằng ngày',
                 'cards' => [
-                    ['term' => 'How are you?', 'meaning' => 'Bạn khỏe không?'],
-                    ['term' => 'See you soon', 'meaning' => 'Hẹn sớm gặp lại'],
-                    ['term' => 'Take care', 'meaning' => 'Giữ gìn sức khỏe nhé'],
-                    ['term' => 'No problem', 'meaning' => 'Không có vấn đề gì'],
-                    ['term' => 'Sounds good', 'meaning' => 'Nghe hay đấy'],
+                    ['term' => 'How are you?', 'meaning' => 'Bạn khỏe không?', 'pos' => 'phr.', 'ipa' => '/haʊ ɑː juː/', 'example' => '*How are you?* — I am fine, thank you.'],
+                    ['term' => 'See you soon', 'meaning' => 'Hẹn sớm gặp lại', 'pos' => 'phr.', 'ipa' => '/siː juː suːn/', 'example' => 'I have to go now. *See you soon*!'],
+                    ['term' => 'Take care', 'meaning' => 'Giữ gìn sức khỏe nhé', 'pos' => 'phr.', 'ipa' => '/teɪk keə(r)/', 'example' => '*Take care* on your way home.'],
+                    ['term' => 'No problem', 'meaning' => 'Không có vấn đề gì', 'pos' => 'phr.', 'ipa' => '/nəʊ ˈprɒbləm/', 'example' => 'Thanks for your help. — *No problem*.'],
+                    ['term' => 'Sounds good', 'meaning' => 'Nghe hay đấy', 'pos' => 'phr.', 'ipa' => '/saʊndz ɡʊd/', 'example' => 'Let us meet at seven. — *Sounds good*.'],
                 ],
             ],
             [
@@ -53,11 +53,11 @@ class VocabularyCategoryDemoSeeder extends Seeder
                 'name' => 'CỤM COLLOCATION THÔNG DỤNG',
                 'category' => 'Cụm từ & Collocation',
                 'cards' => [
-                    ['term' => 'make a decision', 'meaning' => 'đưa ra quyết định'],
-                    ['term' => 'take a break', 'meaning' => 'nghỉ giải lao'],
-                    ['term' => 'pay attention', 'meaning' => 'chú ý'],
-                    ['term' => 'keep in touch', 'meaning' => 'giữ liên lạc'],
-                    ['term' => 'catch a cold', 'meaning' => 'bị cảm lạnh'],
+                    ['term' => 'make a decision', 'meaning' => 'đưa ra quyết định', 'pos' => 'phr.', 'ipa' => '/meɪk ə dɪˈsɪʒn/', 'example' => 'I need to *make a decision* before Friday.'],
+                    ['term' => 'take a break', 'meaning' => 'nghỉ giải lao', 'pos' => 'phr.', 'ipa' => '/teɪk ə breɪk/', 'example' => 'Let us *take a break* after this exercise.'],
+                    ['term' => 'pay attention', 'meaning' => 'chú ý', 'pos' => 'phr.', 'ipa' => '/peɪ əˈtenʃn/', 'example' => 'Please *pay attention* to the teacher.'],
+                    ['term' => 'keep in touch', 'meaning' => 'giữ liên lạc', 'pos' => 'phr.', 'ipa' => '/kiːp ɪn tʌtʃ/', 'example' => 'We still *keep in touch* after leaving school.'],
+                    ['term' => 'catch a cold', 'meaning' => 'bị cảm lạnh', 'pos' => 'phr.', 'ipa' => '/kætʃ ə kəʊld/', 'example' => 'Wear a warm coat or you may *catch a cold*.'],
                 ],
             ],
         ];
@@ -78,7 +78,13 @@ class VocabularyCategoryDemoSeeder extends Seeder
             foreach ($sample['cards'] as $index => $card) {
                 $deck->cards()->updateOrCreate(
                     ['term' => $card['term']],
-                    ['order' => $index + 1, 'meaning' => $card['meaning']],
+                    [
+                        'order' => $index + 1,
+                        'meaning' => $card['meaning'],
+                        'pos' => $card['pos'],
+                        'ipa' => $card['ipa'],
+                        'example' => $card['example'],
+                    ],
                 );
             }
         }
