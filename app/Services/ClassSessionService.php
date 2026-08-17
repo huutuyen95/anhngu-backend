@@ -2,15 +2,15 @@
 
 namespace App\Services;
 
-use App\Models\ClassSession;
 use App\Models\Classroom;
-use App\Models\Mission;
-use App\Models\SessionItem;
-use Illuminate\Support\Facades\DB;
+use App\Models\ClassSession;
+use App\Repositories\ClassSessionRepository;
 use Illuminate\Support\Collection;
 
 class ClassSessionService
 {
+    public function __construct(private readonly ClassSessionRepository $sessions) {}
+
     /**
      * Danh sách buổi của lớp kèm số liệu tiến trình.
      *
@@ -18,12 +18,12 @@ class ClassSessionService
      */
     public function listForClass(Classroom $classroom): Collection
     {
-        $studentCount = $classroom->students()->count();
+        $studentCount = $this->sessions->studentCount($classroom);
 
-        return $classroom->sessions()->withCount('items')->get()->map(function (ClassSession $s) use ($studentCount) {
-            $missions = Mission::where('class_session_id', $s->id);
-            $total = (clone $missions)->count();
-            $done = (clone $missions)->where('status', 'done')->count();
+        return $this->sessions->sessions($classroom)->map(function (ClassSession $s) use ($studentCount) {
+            $counts = $this->sessions->missionCounts($s->id);
+            $total = $counts['total'];
+            $done = $counts['done'];
 
             return [
                 'id' => $s->id,
@@ -46,14 +46,7 @@ class ClassSessionService
      */
     public function create(Classroom $classroom, array $data): ClassSession
     {
-        $order = $data['order'] ?? (($classroom->sessions()->max('order') ?? 0) + 1);
-
-        return $classroom->sessions()->create([
-            'title' => $data['title'],
-            'order' => $order,
-            'note' => $data['note'] ?? null,
-            'held_on' => $data['held_on'] ?? null,
-        ]);
+        return $this->sessions->create($classroom, $data);
     }
 
     /**
@@ -61,19 +54,18 @@ class ClassSessionService
      */
     public function update(ClassSession $session, array $data): ClassSession
     {
-        $session->fill(array_filter([
+        $attributes = array_filter([
             'title' => $data['title'] ?? null,
             'note' => $data['note'] ?? null,
             'held_on' => $data['held_on'] ?? null,
-        ], fn ($k) => array_key_exists($k, $data), ARRAY_FILTER_USE_KEY));
-        $session->save();
+        ], fn ($k) => array_key_exists($k, $data), ARRAY_FILTER_USE_KEY);
 
-        return $session;
+        return $this->sessions->update($session, $attributes);
     }
 
     public function delete(ClassSession $session): void
     {
-        $session->delete();
+        $this->sessions->delete($session);
     }
 
     /**
@@ -81,11 +73,7 @@ class ClassSessionService
      */
     public function reorder(array $orderedIds): void
     {
-        DB::transaction(function () use ($orderedIds) {
-            foreach ($orderedIds as $index => $id) {
-                ClassSession::where('id', $id)->update(['order' => $index + 1]);
-            }
-        });
+        $this->sessions->reorder($orderedIds);
     }
 
     /**
@@ -94,7 +82,7 @@ class ClassSessionService
      * @param  array<int, array<string, mixed>>  $sessions
      * @param  array<int>  $deletedIds
      * @param  array<int>  $forceDeleteIds
-     * @return array<string, mixed>  ['blocked'=>[...]] nếu bị chặn xoá, ngược lại kết quả sync.
+     * @return array<string, mixed> ['blocked'=>[...]] nếu bị chặn xoá, ngược lại kết quả sync.
      */
     public function sync(Classroom $classroom, array $sessions, array $deletedIds, array $forceDeleteIds): array
     {
@@ -104,12 +92,13 @@ class ClassSessionService
             if (in_array($id, $forceDeleteIds, true)) {
                 continue;
             }
-            $session = $classroom->sessions()->find($id);
+            $session = $this->sessions->findInClass($classroom, $id);
             if (! $session) {
                 continue;
             }
-            $items = SessionItem::where('class_session_id', $id)->count();
-            $missions = Mission::where('class_session_id', $id)->count();
+            $usage = $this->sessions->usageCounts($id);
+            $items = $usage['items'];
+            $missions = $usage['missions'];
             if ($items > 0 || $missions > 0) {
                 $blocked[] = [
                     'id' => $id,
@@ -124,38 +113,10 @@ class ClassSessionService
             return ['blocked' => $blocked];
         }
 
-        $counts = ['created' => 0, 'updated' => 0, 'deleted' => 0];
-
-        DB::transaction(function () use ($classroom, $sessions, $deletedIds, &$counts) {
-            // Dùng ClassSession trực tiếp (relation sessions() có orderBy → SQLite không cho UPDATE/DELETE kèm ORDER BY).
-            if ($deletedIds) {
-                $counts['deleted'] = ClassSession::where('classroom_id', $classroom->id)
-                    ->whereIn('id', $deletedIds)->delete();
-            }
-
-            foreach ($sessions as $i => $data) {
-                $order = $i + 1; // Ép order thành dãy liên tục 1..n theo thứ tự gửi lên.
-                if (! empty($data['id'])) {
-                    ClassSession::where('classroom_id', $classroom->id)->where('id', $data['id'])->update([
-                        'title' => $data['title'],
-                        'order' => $order,
-                        'is_visible' => $data['is_visible'] ?? true,
-                    ]);
-                    $counts['updated']++;
-                } else {
-                    ClassSession::create([
-                        'classroom_id' => $classroom->id,
-                        'title' => $data['title'],
-                        'order' => $order,
-                        'is_visible' => $data['is_visible'] ?? true,
-                    ]);
-                    $counts['created']++;
-                }
-            }
-        });
+        $counts = $this->sessions->sync($classroom, $sessions, $deletedIds);
 
         return array_merge(
-            ['ok' => true, 'sessions' => $this->listForClass($classroom->fresh())->values()],
+            ['ok' => true, 'sessions' => $this->listForClass($this->sessions->refreshClassroom($classroom))->values()],
             $counts,
         );
     }

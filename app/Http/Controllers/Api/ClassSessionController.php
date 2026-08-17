@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Classroom\ReorderClassSessionsRequest;
+use App\Http\Requests\Classroom\StoreClassSessionRequest;
 use App\Http\Requests\Classroom\SyncSessionsRequest;
-use App\Models\ClassSession;
+use App\Http\Requests\Classroom\UpdateClassSessionRequest;
 use App\Models\Classroom;
+use App\Models\ClassSession;
 use App\Services\ClassSessionService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class ClassSessionController extends Controller
 {
@@ -19,27 +21,18 @@ class ClassSessionController extends Controller
         return response()->json(['data' => $this->sessions->listForClass($classroom)->values()]);
     }
 
-    public function store(Request $request, Classroom $classroom): JsonResponse
+    public function store(StoreClassSessionRequest $request, Classroom $classroom): JsonResponse
     {
-        $data = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
-            'order' => ['nullable', 'integer'],
-            'note' => ['nullable', 'string'],
-            'held_on' => ['nullable', 'date'],
-        ]);
+        $data = $request->validated();
 
         $session = $this->sessions->create($classroom, $data);
 
         return response()->json(['session' => $session], 201);
     }
 
-    public function update(Request $request, ClassSession $session): JsonResponse
+    public function update(UpdateClassSessionRequest $request, ClassSession $session): JsonResponse
     {
-        $data = $request->validate([
-            'title' => ['sometimes', 'required', 'string', 'max:255'],
-            'note' => ['nullable', 'string'],
-            'held_on' => ['nullable', 'date'],
-        ]);
+        $data = $request->validated();
 
         return response()->json(['session' => $this->sessions->update($session, $data)]);
     }
@@ -73,12 +66,9 @@ class ClassSessionController extends Controller
         return response()->json($result);
     }
 
-    public function reorder(Request $request): JsonResponse
+    public function reorder(ReorderClassSessionsRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
-            'ids.*' => ['integer', 'exists:class_sessions,id'],
-        ]);
+        $data = $request->validated();
 
         $this->sessions->reorder($data['ids']);
 

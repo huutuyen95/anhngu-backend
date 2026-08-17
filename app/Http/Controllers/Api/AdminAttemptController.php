@@ -4,22 +4,20 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Attempt\GradeAttemptRequest;
+use App\Http\Requests\Attempt\ListAttemptsRequest;
 use App\Http\Resources\AttemptDetailResource;
 use App\Http\Resources\AttemptResource;
 use App\Models\TestAttempt;
 use App\Services\AttemptGradingService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class AdminAttemptController extends Controller
 {
     public function __construct(private readonly AttemptGradingService $attempts) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(ListAttemptsRequest $request): JsonResponse
     {
-        $page = $this->attempts->list($request->only([
-            'status', 'classroom_id', 'test_id', 'user_id', 'source', 'per_page',
-        ]));
+        $page = $this->attempts->list($request->validated());
 
         return response()->json([
             'data' => AttemptResource::collection($page->items()),

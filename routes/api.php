@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\AdminAttemptController;
 use App\Http\Controllers\Api\AdminTestController;
+use App\Http\Controllers\Api\ArticleCategoryController;
+use App\Http\Controllers\Api\ArticleController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -11,8 +13,8 @@ use App\Http\Controllers\Api\ClassSessionController;
 use App\Http\Controllers\Api\ClassStudentController;
 use App\Http\Controllers\Api\ContentController;
 use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\DeckController;
 use App\Http\Controllers\Api\DeckCategoryController;
+use App\Http\Controllers\Api\DeckController;
 use App\Http\Controllers\Api\DictionaryController;
 use App\Http\Controllers\Api\DocumentAttachmentController;
 use App\Http\Controllers\Api\DocumentCategoryController;
@@ -22,6 +24,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SessionItemController;
 use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\StudentArticleController;
 use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentDeckController;
@@ -64,6 +67,11 @@ Route::prefix('v1')->group(function () {
         Route::get('dictionary', [DictionaryController::class, 'lookup']);
         Route::post('me/vocab', [DictionaryController::class, 'saveVocab']);
 
+        // Bài viết — thư viện học sinh.
+        Route::get('library/articles/categories', [StudentArticleController::class, 'categories']);
+        Route::get('library/articles', [StudentArticleController::class, 'index']);
+        Route::get('articles/{article}/read', [StudentArticleController::class, 'read']);
+
         // Từ vựng — khu học sinh
         Route::get('library/decks', [StudentDeckController::class, 'library']);
         Route::get('decks/{deck}/study', [StudentDeckController::class, 'study']);
@@ -104,6 +112,12 @@ Route::prefix('v1')->group(function () {
             Route::get('media/class-covers', [MediaController::class, 'classCovers']);
             Route::post('media/upload', [MediaController::class, 'upload']);
             Route::post('media/embed-preview', [MediaController::class, 'embedPreview']);
+
+            // Bài viết — quản lý riêng với tài liệu/bài giảng.
+            Route::get('article-categories', [ArticleCategoryController::class, 'index']);
+            Route::put('article-categories/sync', [ArticleCategoryController::class, 'sync']);
+            Route::patch('articles/{article}/publish', [ArticleController::class, 'publish']);
+            Route::apiResource('articles', ArticleController::class);
 
             // Tài liệu & Bài giảng — khu admin
             Route::get('document-categories', [DocumentCategoryController::class, 'index']);

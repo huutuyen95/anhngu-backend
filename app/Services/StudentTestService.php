@@ -2,12 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\Question;
 use App\Models\Test;
 use App\Models\TestAttempt;
 use App\Models\User;
+use App\Repositories\StudentTestRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -19,6 +18,8 @@ use Illuminate\Support\Collection;
  */
 class StudentTestService
 {
+    public function __construct(private readonly StudentTestRepository $tests) {}
+
     /** Lượt đã nộp — xem TestAttempt::status. */
     private const SUBMITTED_STATUSES = ['pending_review', 'submitted', 'graded'];
 
@@ -45,24 +46,11 @@ class StudentTestService
      */
     public function list(array $filters, User $student): LengthAwarePaginator
     {
-        $query = $this->baseQuery($filters)
-            // Nhãn nhóm trên card: "<lớp> / <thư mục cha> / <thư mục>".
-            ->with([
-                'category:id,name,parent_id,classroom_id',
-                'category.parent:id,name',
-                'category.classroom:id,name',
-            ])
-            // Điểm TB / tổng lượt làm: đếm trên activity_logs vì test_attempts đã bị dedup xoá.
-            ->withCount(['activityLogs as attempts_total' => fn ($q) => $q->where('type', 'test_attempt')])
-            ->withAvg(['activityLogs as avg_score' => fn ($q) => $q->where('type', 'test_attempt')], 'score');
-
-        $this->applyStatusFilter($query, $filters, $student);
-        $this->applySort($query, $filters);
-
-        $page = $query->paginate($this->perPage($filters))->withQueryString();
+        $sort = in_array($filters['sort'] ?? '', self::SORTS, true) ? $filters['sort'] : 'newest';
+        $page = $this->tests->paginate($filters, $student, $this->requestedBuckets($filters), $this->perPage($filters), $sort);
 
         $tests = $page->getCollection();
-        $questionCounts = Question::countsByTest($tests->pluck('id'));
+        $questionCounts = $this->tests->questionCounts($tests->pluck('id'));
         $attemptsByTest = $this->attemptsOf($student, $tests->pluck('id'));
 
         $tests->each(function (Test $test) use ($questionCounts, $attemptsByTest) {
@@ -75,6 +63,13 @@ class StudentTestService
         return $page;
     }
 
+    public function detail(Test $test): Test
+    {
+        abort_unless($test->is_published, 404);
+
+        return $this->tests->detail($test);
+    }
+
     /**
      * Số đếm cho hub card + badge lọc trạng thái. Tính trên toàn bộ đề khớp `q`/`skill`
      * (KHÔNG áp `status`) để badge vẫn hiện đủ 4 nhóm khi đang lọc theo một nhóm.
@@ -84,7 +79,7 @@ class StudentTestService
      */
     public function summary(array $filters, User $student): array
     {
-        $testIds = $this->baseQuery($filters)->pluck('id');
+        $testIds = $this->tests->matchingIds($filters);
 
         $counts = array_fill_keys(self::BUCKETS, 0);
 
@@ -96,70 +91,9 @@ class StudentTestService
         $counts['todo'] = $testIds->count() - ($counts['doing'] + $counts['done'] + $counts['grading']);
 
         return [
-            'new_this_week' => (clone $this->baseQuery($filters))
-                ->where('created_at', '>=', now()->subWeek())
-                ->count(),
+            'new_this_week' => $this->tests->newThisWeek($filters),
             'status_counts' => $counts,
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $filters
-     * @return Builder<Test>
-     */
-    private function baseQuery(array $filters): Builder
-    {
-        return Test::query()
-            ->where('is_published', true)
-            ->when($filters['q'] ?? null, fn ($q, $term) => $q->where('title', 'like', '%'.$term.'%'))
-            ->when($filters['skill'] ?? null, fn ($q, $skill) => $q->where('skill', $skill));
-    }
-
-    /**
-     * Lọc theo nhóm trạng thái. Mỗi đề chỉ thuộc ĐÚNG 1 nhóm (giống card ở FE): đang làm dở thì
-     * là `doing` kể cả khi đã có lượt nộp cũ, nên `grading`/`done` phải loại lượt in_progress ra.
-     *
-     * @param  Builder<Test>  $query
-     * @param  array<string, mixed>  $filters
-     */
-    private function applyStatusFilter(Builder $query, array $filters, User $student): void
-    {
-        $buckets = $this->requestedBuckets($filters);
-
-        if ($buckets->isEmpty()) {
-            return;
-        }
-
-        $query->where(function (Builder $query) use ($buckets, $student) {
-            foreach ($buckets as $bucket) {
-                $query->orWhere(fn (Builder $q) => $this->whereBucket($q, $bucket, $student));
-            }
-        });
-    }
-
-    /**
-     * @param  Builder<Test>  $query
-     */
-    private function whereBucket(Builder $query, string $bucket, User $student): void
-    {
-        // `whereNull('mission_id')`: bộ lọc trạng thái ở Thư viện chỉ nhìn lượt tự luyện,
-        // giống hệt attemptsOf() — nếu không, đề đã làm trong lớp sẽ biến mất khỏi "Chưa làm".
-        $mine = fn (array $statuses) => fn ($q) => $q
-            ->where('user_id', $student->id)
-            ->whereNull('mission_id')
-            ->whereIn('status', $statuses);
-
-        match ($bucket) {
-            'todo' => $query->whereDoesntHave(
-                'attempts',
-                fn ($q) => $q->where('user_id', $student->id)->whereNull('mission_id')
-            ),
-            'doing' => $query->whereHas('attempts', $mine(['in_progress'])),
-            'grading' => $query->whereHas('attempts', $mine(['pending_review']))
-                ->whereDoesntHave('attempts', $mine(['in_progress'])),
-            'done' => $query->whereHas('attempts', $mine(self::FINALIZED_STATUSES))
-                ->whereDoesntHave('attempts', $mine(['in_progress', 'pending_review'])),
-        };
     }
 
     /**
@@ -175,24 +109,6 @@ class StudentTestService
             ->filter(fn ($bucket) => in_array($bucket, self::BUCKETS, true))
             ->unique()
             ->values();
-    }
-
-    /**
-     * @param  Builder<Test>  $query
-     * @param  array<string, mixed>  $filters
-     */
-    private function applySort(Builder $query, array $filters): void
-    {
-        $sort = in_array($filters['sort'] ?? '', self::SORTS, true) ? $filters['sort'] : 'newest';
-
-        match ($sort) {
-            'name' => $query->orderBy('title'),
-            'popular' => $query->orderByDesc('attempts_total'),
-            default => $query->orderByDesc('created_at'),
-        };
-
-        // Chốt thứ tự để phân trang không nhảy khi trùng giá trị sort.
-        $query->orderByDesc('id');
     }
 
     /**
@@ -220,21 +136,7 @@ class StudentTestService
             return collect();
         }
 
-        return TestAttempt::query()
-            ->where('user_id', $student->id)
-            // CHỈ lượt tự luyện: bài cô giao trong lớp có nguồn riêng, không được hiện thành
-            // "đã làm" / điểm cao nhất trên card ở Thư viện.
-            ->whereNull('mission_id')
-            ->whereIn('status', array_keys(self::BUCKET_OF_STATUS))
-            ->whereIn('test_id', $testIds)
-            // Tiến độ "câu 12/40" của lượt đang làm dở — chỉ đếm câu đã thực sự trả lời.
-            ->withCount(['answers as answered_count' => fn ($q) => $q->where(
-                fn ($q) => $q->whereNotNull('question_option_id')
-                    ->orWhere(fn ($q) => $q->whereNotNull('answer_text')->where('answer_text', '!=', ''))
-                    ->orWhereNotNull('answer_file_url')
-            )])
-            ->get()
-            ->groupBy('test_id');
+        return $this->tests->attempts($student, $testIds, array_keys(self::BUCKET_OF_STATUS));
     }
 
     /**

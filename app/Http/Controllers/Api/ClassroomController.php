@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Classroom\DeleteClassroomRequest;
+use App\Http\Requests\Classroom\ListClassroomsRequest;
 use App\Http\Requests\Classroom\StoreClassroomRequest;
 use App\Http\Requests\Classroom\UpdateClassroomRequest;
 use App\Http\Resources\ClassroomResource;
@@ -10,29 +12,14 @@ use App\Models\Classroom;
 use App\Services\ClassroomOverviewService;
 use App\Services\ClassroomService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class ClassroomController extends Controller
 {
     public function __construct(private readonly ClassroomService $classrooms) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(ListClassroomsRequest $request): JsonResponse
     {
-        $today = now()->toDateString();
-
-        $page = Classroom::query()
-            ->when($request->input('q'), fn ($q, $term) => $q->where('name', 'like', "%{$term}%"))
-            ->when($request->input('status'), function ($q, $status) use ($today) {
-                match ($status) {
-                    'upcoming' => $q->whereNotNull('starts_on')->whereDate('starts_on', '>', $today),
-                    'ended' => $q->whereNotNull('ends_on')->whereDate('ends_on', '<', $today),
-                    'active' => $q->where(fn ($s) => $s->whereNull('starts_on')->orWhereDate('starts_on', '<=', $today))
-                        ->where(fn ($s) => $s->whereNull('ends_on')->orWhereDate('ends_on', '>=', $today)),
-                    default => $q,
-                };
-            })
-            ->latest()
-            ->paginate((int) $request->input('per_page', 24));
+        $page = $this->classrooms->paginate($request->validated());
 
         return response()->json([
             'data' => ClassroomResource::collection($page->items()),
@@ -71,9 +58,9 @@ class ClassroomController extends Controller
         return response()->json(['classroom' => new ClassroomResource($updated)]);
     }
 
-    public function destroy(Request $request, Classroom $classroom): JsonResponse
+    public function destroy(DeleteClassroomRequest $request, Classroom $classroom): JsonResponse
     {
-        $studentCount = $classroom->students()->count();
+        $studentCount = $this->classrooms->studentCount($classroom);
 
         if ($studentCount > 0 && ! $request->boolean('confirm')) {
             return response()->json([

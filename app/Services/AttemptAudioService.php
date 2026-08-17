@@ -6,6 +6,7 @@ use App\Enums\QuestionType;
 use App\Models\AttemptAnswer;
 use App\Models\Question;
 use App\Models\TestAttempt;
+use App\Repositories\AttemptRepository;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -18,6 +19,8 @@ class AttemptAudioService
 
     private const DIRECTORY = 'answers/audio';
 
+    public function __construct(private readonly AttemptRepository $attempts) {}
+
     /**
      * Lưu file audio mới cho (attempt, question), xoá file cũ trên disk nếu có.
      */
@@ -25,9 +28,7 @@ class AttemptAudioService
     {
         $this->assertSpeakingQuestionOfAttempt($attempt, $question);
 
-        $existing = AttemptAnswer::where('test_attempt_id', $attempt->id)
-            ->where('question_id', $question->id)
-            ->first();
+        $existing = $this->attempts->answer($attempt, $question);
 
         if ($existing?->answer_file_url) {
             $this->deleteFile($existing->answer_file_url);
@@ -35,10 +36,7 @@ class AttemptAudioService
 
         $path = $file->store(self::DIRECTORY, self::DISK);
 
-        return AttemptAnswer::updateOrCreate(
-            ['test_attempt_id' => $attempt->id, 'question_id' => $question->id],
-            ['answer_file_url' => asset('storage/'.$path)]
-        );
+        return $this->attempts->upsertAudioAnswer($attempt, $question, asset('storage/'.$path));
     }
 
     /**
@@ -48,25 +46,21 @@ class AttemptAudioService
     {
         $this->assertSpeakingQuestionOfAttempt($attempt, $question);
 
-        $answer = AttemptAnswer::where('test_attempt_id', $attempt->id)
-            ->where('question_id', $question->id)
-            ->first();
+        $answer = $this->attempts->answer($attempt, $question);
 
         if (! $answer?->answer_file_url) {
             return;
         }
 
         $this->deleteFile($answer->answer_file_url);
-        $answer->update(['answer_file_url' => null]);
+        $this->attempts->upsertAudioAnswer($attempt, $question, null);
     }
 
     private function assertSpeakingQuestionOfAttempt(TestAttempt $attempt, Question $question): void
     {
         abort_unless($question->type === QuestionType::Speaking, 422, 'Câu hỏi không phải dạng speaking.');
 
-        $belongsToAttempt = Question::where('id', $question->id)
-            ->whereHas('section.part', fn ($q) => $q->where('test_id', $attempt->test_id))
-            ->exists();
+        $belongsToAttempt = $this->attempts->questionBelongsToTest($question, $attempt);
 
         abort_unless($belongsToAttempt, 404);
     }

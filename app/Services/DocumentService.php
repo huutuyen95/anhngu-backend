@@ -4,9 +4,9 @@ namespace App\Services;
 
 use App\Models\Document;
 use App\Models\DocumentAttachment;
-use App\Models\SessionItem;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
+use App\Repositories\DocumentRepository;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 
 class DocumentService
@@ -14,7 +14,12 @@ class DocumentService
     /** Hạn mức dung lượng toàn trung tâm: 5 GB. */
     public const QUOTA_BYTES = 5 * 1024 * 1024 * 1024;
 
-    public function __construct(private readonly HtmlSanitizer $sanitizer) {}
+    public function __construct(private readonly HtmlSanitizer $sanitizer, private readonly DocumentRepository $documents) {}
+
+    public function paginate(array $filters): LengthAwarePaginator
+    {
+        return $this->documents->paginate($filters);
+    }
 
     /**
      * @param  array<string, mixed>  $data
@@ -24,24 +29,19 @@ class DocumentService
         $type = $data['type'] ?? 'document';
         $body = $this->sanitizer->clean($data['body'] ?? '');
 
-        return DB::transaction(function () use ($data, $teacher, $type, $body) {
-            $doc = Document::create([
-                'type' => $type,
-                'title' => $data['title'],
-                'slug' => $this->uniqueSlug($data['title']),
-                'category_id' => $data['category_id'] ?? null,
-                'thumbnail_url' => $data['thumbnail_url'] ?? null,
-                'body' => $body,
-                'excerpt' => $this->excerpt($body),
-                'reading_minutes' => $this->readingMinutes($body),
-                // Bài giảng LUÔN không publish (chỉ đến HS qua giao bài).
-                'is_published' => $type === 'lecture' ? false : (bool) ($data['is_published'] ?? false),
-                'created_by' => $teacher->id,
-            ]);
-            $doc->classrooms()->sync($data['classroom_ids'] ?? []);
-
-            return $doc;
-        });
+        return $this->documents->create([
+            'type' => $type,
+            'title' => $data['title'],
+            'slug' => $this->uniqueSlug($data['title']),
+            'category_id' => $data['category_id'] ?? null,
+            'thumbnail_url' => $data['thumbnail_url'] ?? null,
+            'body' => $body,
+            'excerpt' => $this->excerpt($body),
+            'reading_minutes' => $this->readingMinutes($body),
+            // Bài giảng LUÔN không publish (chỉ đến HS qua giao bài).
+            'is_published' => $type === 'lecture' ? false : (bool) ($data['is_published'] ?? false),
+            'created_by' => $teacher->id,
+        ], $data['classroom_ids'] ?? []);
     }
 
     /**
@@ -49,35 +49,29 @@ class DocumentService
      */
     public function update(Document $doc, array $data): Document
     {
-        DB::transaction(function () use ($doc, $data) {
-            if (array_key_exists('body', $data)) {
-                $body = $this->sanitizer->clean($data['body']);
-                $doc->body = $body;
-                $doc->excerpt = $this->excerpt($body);
-                $doc->reading_minutes = $this->readingMinutes($body);
+        $attributes = [];
+        if (array_key_exists('body', $data)) {
+            $body = $this->sanitizer->clean($data['body']);
+            $attributes['body'] = $body;
+            $attributes['excerpt'] = $this->excerpt($body);
+            $attributes['reading_minutes'] = $this->readingMinutes($body);
+        }
+        foreach (['title', 'category_id', 'thumbnail_url'] as $f) {
+            if (array_key_exists($f, $data)) {
+                $attributes[$f] = $data[$f];
             }
-            foreach (['title', 'category_id', 'thumbnail_url'] as $f) {
-                if (array_key_exists($f, $data)) {
-                    $doc->{$f} = $data[$f];
-                }
+        }
+        if (array_key_exists('type', $data)) {
+            $attributes['type'] = $data['type'];
+            if ($data['type'] === 'lecture') {
+                $attributes['is_published'] = false;
             }
-            if (array_key_exists('type', $data)) {
-                $doc->type = $data['type'];
-                if ($data['type'] === 'lecture') {
-                    $doc->is_published = false;
-                }
-            }
-            if (array_key_exists('is_published', $data) && $doc->type !== 'lecture') {
-                $doc->is_published = (bool) $data['is_published'];
-            }
-            $doc->save();
+        }
+        if (array_key_exists('is_published', $data) && ($attributes['type'] ?? $doc->type) !== 'lecture') {
+            $attributes['is_published'] = (bool) $data['is_published'];
+        }
 
-            if (array_key_exists('classroom_ids', $data)) {
-                $doc->classrooms()->sync($data['classroom_ids'] ?? []);
-            }
-        });
-
-        return $doc->fresh();
+        return $this->documents->update($doc, $attributes, array_key_exists('classroom_ids', $data) ? ($data['classroom_ids'] ?? []) : null);
     }
 
     /**
@@ -87,15 +81,7 @@ class DocumentService
      */
     public function sessionsUsing(Document $doc): array
     {
-        return SessionItem::where('itemable_type', $doc->getMorphClass())
-            ->where('itemable_id', $doc->id)
-            ->with('classSession.classroom')
-            ->get()
-            ->map(fn (SessionItem $i) => [
-                'id' => $i->classSession?->id,
-                'title' => $i->classSession?->title,
-                'classroom' => $i->classSession?->classroom?->name,
-            ])->values()->all();
+        return $this->documents->sessionsUsing($doc);
     }
 
     /**
@@ -103,15 +89,13 @@ class DocumentService
      */
     public function storageUsage(): array
     {
-        $total = (int) DocumentAttachment::sum('size_bytes');
-        $byType = DocumentAttachment::selectRaw('mime, SUM(size_bytes) as bytes')
-            ->groupBy('mime')->get()
+        $stats = $this->documents->attachmentStats();
+        $byType = $stats['by_mime']
             ->groupBy(fn ($r) => $this->group($r->mime))
             ->map(fn ($rows, $group) => ['type' => $group, 'bytes' => (int) $rows->sum('bytes')])
             ->values();
 
-        $biggest = DocumentAttachment::with('document:id,title')
-            ->orderByDesc('size_bytes')->take(10)->get()
+        $biggest = $stats['biggest']
             ->map(fn (DocumentAttachment $a) => [
                 'id' => $a->id,
                 'name' => $a->name,
@@ -121,7 +105,7 @@ class DocumentService
             ]);
 
         return [
-            'total_bytes' => $total,
+            'total_bytes' => $stats['total'],
             'limit_bytes' => self::QUOTA_BYTES,
             'by_type' => $byType,
             'biggest' => $biggest,
@@ -130,7 +114,7 @@ class DocumentService
 
     public function remainingBytes(): int
     {
-        return max(0, self::QUOTA_BYTES - (int) DocumentAttachment::sum('size_bytes'));
+        return max(0, self::QUOTA_BYTES - $this->documents->attachmentStats()['total']);
     }
 
     private function group(?string $mime): string
@@ -162,10 +146,30 @@ class DocumentService
         $base = Str::slug($title) ?: 'noi-dung';
         $slug = $base;
         $i = 1;
-        while (Document::withTrashed()->where('slug', $slug)->exists()) {
+        while ($this->documents->slugExists($slug)) {
             $slug = "{$base}-".(++$i);
         }
 
         return $slug;
+    }
+
+    public function detail(Document $document): Document
+    {
+        return $this->documents->detail($document);
+    }
+
+    public function publish(Document $document, bool $published): Document
+    {
+        abort_if($document->type === 'lecture', 422, 'Bài giảng không có công tắc thư viện — chỉ đến học sinh qua giao bài.');
+
+        return $this->documents->update($document, ['is_published' => $published]);
+    }
+
+    public function delete(Document $document): array
+    {
+        $sessions = $this->sessionsUsing($document);
+        $this->documents->delete($document);
+
+        return $sessions;
     }
 }

@@ -4,15 +4,16 @@ namespace App\Services;
 
 use App\Enums\QuestionType;
 use App\Http\Resources\TestDetailResource;
-use App\Models\ActivityLog;
 use App\Models\AttemptAnswer;
 use App\Models\Question;
 use App\Models\Test;
 use App\Models\TestAttempt;
-use Illuminate\Support\Facades\DB;
+use App\Repositories\AttemptRepository;
 
 class TestGradingService
 {
+    public function __construct(private readonly AttemptRepository $attempts) {}
+
     /**
      * Chấm lượt làm bài `$attempt` (đang in_progress), rồi đối chiếu với lượt `submitted`
      * cao điểm nhất hiện có của (user, test) — mỗi (user, test) chỉ giữ lại 1 dòng
@@ -25,14 +26,14 @@ class TestGradingService
      */
     public function submit(TestAttempt $attempt): array
     {
-        return DB::transaction(function () use ($attempt) {
-            $test = $attempt->test()->with('parts.sections.questions.options')->firstOrFail();
+        return $this->attempts->transaction(function () use ($attempt) {
+            $test = $this->attempts->submissionTest($attempt);
 
             $graded = $this->gradeQuestions($attempt, $test);
 
             // Log MỌI lượt nộp (kể cả lượt sắp bị dedup xoá) — đây là nguồn duy nhất để tính
             // điểm TB / tổng lượt làm của một đề.
-            ActivityLog::create([
+            $this->attempts->logActivity([
                 'user_id' => $attempt->user_id,
                 'test_id' => $test->id,
                 'type' => 'test_attempt',
@@ -75,7 +76,7 @@ class TestGradingService
             ->flatMap(fn ($part) => $part->sections)
             ->flatMap(fn ($section) => $section->questions);
 
-        $submittedAnswers = $attempt->answers()->get()->keyBy('question_id');
+        $submittedAnswers = $this->attempts->answersByQuestion($attempt);
 
         $gradableCount = 0;
         $correctCount = 0;
@@ -101,18 +102,12 @@ class TestGradingService
                 }
             }
 
-            $answer = AttemptAnswer::updateOrCreate(
-                [
-                    'test_attempt_id' => $attempt->id,
-                    'question_id' => $question->id,
-                ],
-                [
-                    'question_option_id' => $submitted?->question_option_id,
-                    'answer_text' => $submitted?->answer_text,
-                    'is_correct' => $isCorrect,
-                    'score' => $isCorrect ? $question->score : 0,
-                ]
-            );
+            $answer = $this->attempts->upsertGradedAnswer($attempt, $question, [
+                'question_option_id' => $submitted?->question_option_id,
+                'answer_text' => $submitted?->answer_text,
+                'is_correct' => $isCorrect,
+                'score' => $isCorrect ? $question->score : 0,
+            ]);
 
             $answerRows[] = [
                 'question_id' => $answer->question_id,
@@ -148,13 +143,13 @@ class TestGradingService
             return;
         }
 
-        $mission = $attempt->mission()->first();
+        $mission = $this->attempts->missionWithClassroom($attempt);
 
         if (! $mission || $mission->status === 'done') {
             return;
         }
 
-        $mission->update(['status' => 'done', 'completed_at' => now()]);
+        $this->attempts->updateMission($mission, ['status' => 'done', 'completed_at' => now()]);
 
         if ($mission->classroom) {
             app(ClassroomStatsService::class)->forget($mission->classroom);
@@ -168,7 +163,7 @@ class TestGradingService
      */
     private function markPendingReview(TestAttempt $attempt, array $graded): void
     {
-        $attempt->update([
+        $this->attempts->updateAttempt($attempt, [
             'submitted_at' => now(),
             'status' => 'pending_review',
             'total_score' => $graded['total_score'],
@@ -197,21 +192,16 @@ class TestGradingService
     ): bool {
         // CHỈ so trong cùng nguồn (cùng mission, hoặc cùng là lượt tự luyện). Trước đây so
         // trên toàn bộ (user, test) nên lượt tự luyện điểm cao ở thư viện xoá mất bài cô giao.
-        $previousBest = TestAttempt::whereIn('status', ['submitted', 'graded'])
-            ->sameScope($attempt)
-            ->where('id', '!=', $attempt->id)
-            ->lockForUpdate()
-            ->first();
+        $previousBest = $this->attempts->previousBest($attempt);
 
         if (! $previousBest || $keepLatest || $graded['total_score'] > (float) $previousBest->total_score) {
             $attemptCount = $previousBest ? $previousBest->attempt_count + 1 : $attempt->attempt_count;
 
             if ($previousBest) {
-                $previousBest->answers()->delete();
-                $previousBest->delete();
+                $this->attempts->deleteAttemptWithAnswers($previousBest);
             }
 
-            $attempt->update([
+            $this->attempts->updateAttempt($attempt, [
                 'submitted_at' => $attempt->submitted_at ?? now(),
                 'status' => $finalStatus,
                 'total_score' => $graded['total_score'],
@@ -225,13 +215,12 @@ class TestGradingService
         }
 
         // Lượt vừa làm không cao điểm hơn best cũ → giữ best cũ, xoá lượt vừa làm.
-        $previousBest->update([
+        $this->attempts->updateAttempt($previousBest, [
             'attempt_count' => $previousBest->attempt_count + 1,
             'last_attempted_at' => now(),
         ]);
 
-        $attempt->answers()->delete();
-        $attempt->delete();
+        $this->attempts->deleteAttemptWithAnswers($attempt);
 
         return false;
     }

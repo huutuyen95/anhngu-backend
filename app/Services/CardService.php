@@ -2,13 +2,32 @@
 
 namespace App\Services;
 
+use App\Imports\CardsImport;
 use App\Models\Card;
 use App\Models\Deck;
-use App\Models\IpaEntry;
-use Illuminate\Support\Facades\DB;
+use App\Repositories\CardRepository;
+use Illuminate\Http\UploadedFile;
+use Maatwebsite\Excel\Facades\Excel;
 
 class CardService
 {
+    public function __construct(private readonly CardRepository $cards) {}
+
+    public function create(Deck $deck, array $data): Card
+    {
+        return $this->cards->create($deck, $data);
+    }
+
+    public function update(Card $card, array $data): Card
+    {
+        return $this->cards->update($card, $data);
+    }
+
+    public function delete(Card $card): void
+    {
+        $this->cards->delete($card);
+    }
+
     /**
      * Tra IPA + loại từ hàng loạt từ từ điển nội bộ.
      *
@@ -19,11 +38,7 @@ class CardService
     {
         $normalized = collect($words)->map(fn ($w) => strtolower(trim($w)))->filter()->unique();
 
-        return IpaEntry::whereIn('word', $normalized)
-            ->get()
-            ->keyBy('word')
-            ->map(fn (IpaEntry $e) => ['ipa' => $e->ipa, 'pos' => $e->pos])
-            ->all();
+        return $this->cards->ipaEntries($normalized->all());
     }
 
     /**
@@ -31,21 +46,36 @@ class CardService
      */
     public function reorder(Deck $deck, array $orderedIds): void
     {
-        if ($orderedIds === []) {
-            return;
+        $this->cards->reorder($deck, $orderedIds);
+    }
+
+    public function uploadImage(Card $card, UploadedFile $file): Card
+    {
+        $path = $file->store('card-images', 'public');
+
+        return $this->cards->updateMedia($card, 'image_url', asset('storage/'.$path));
+    }
+
+    public function uploadAudio(Card $card, UploadedFile $file): Card
+    {
+        $path = $file->store('card-audio', 'public');
+
+        return $this->cards->updateMedia($card, 'audio_url', asset('storage/'.$path));
+    }
+
+    public function deleteAudio(Card $card): void
+    {
+        $this->cards->updateMedia($card, 'audio_url', null);
+    }
+
+    public function import(Deck $deck, UploadedFile $file, bool $dryRun, bool $autoIpa, bool $overwrite): array
+    {
+        $rows = Excel::toArray(new CardsImport, $file)[0] ?? [];
+        if ($dryRun) {
+            return $this->previewImport($deck, $rows);
         }
 
-        $cases = [];
-        $ids = [];
-        foreach ($orderedIds as $index => $id) {
-            $id = (int) $id;
-            $cases[] = "WHEN {$id} THEN ".($index + 1);
-            $ids[] = $id;
-        }
-
-        Card::where('deck_id', $deck->id)
-            ->whereIn('id', $ids)
-            ->update(['order' => DB::raw('CASE id '.implode(' ', $cases).' END')]);
+        return $this->commitImport($deck, $rows, $autoIpa, $overwrite);
     }
 
     /**
@@ -57,7 +87,7 @@ class CardService
     public function previewImport(Deck $deck, array $rows): array
     {
         $existing = array_flip(
-            $deck->cards()->pluck('term')->map(fn ($t) => strtolower($t))->all()
+            $this->cards->existingTerms($deck)
         );
         $dict = $this->lookupIpa(array_map(fn ($r) => (string) ($r['term'] ?? ''), $rows));
 
@@ -115,53 +145,7 @@ class CardService
     public function commitImport(Deck $deck, array $rows, bool $autoIpa, bool $overwrite): array
     {
         $preview = $this->previewImport($deck, $rows);
-        $counts = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'error' => 0];
 
-        DB::transaction(function () use ($deck, $preview, $rows, $autoIpa, $overwrite, &$counts) {
-            $order = (int) ($deck->cards()->max('order') ?? 0);
-
-            foreach ($preview['rows'] as $idx => $line) {
-                if ($line['status'] === 'error') {
-                    $counts['error']++;
-
-                    continue;
-                }
-
-                // IPA/POS trong preview có thể đã gắn gợi ý từ điển — chỉ dùng khi autoIpa.
-                $rawIpa = trim((string) ($rows[$idx]['ipa'] ?? ''));
-                $rawPos = trim((string) ($rows[$idx]['pos'] ?? ''));
-                $ipa = $rawIpa !== '' ? $rawIpa : ($autoIpa ? $line['ipa'] : null);
-                $pos = $rawPos !== '' ? $rawPos : ($autoIpa ? $line['pos'] : null);
-
-                if ($line['status'] === 'duplicate') {
-                    if (! $overwrite) {
-                        $counts['skipped']++;
-
-                        continue;
-                    }
-                    $deck->cards()->where('term', $line['term'])->update([
-                        'meaning' => $line['meaning'],
-                        'ipa' => $ipa,
-                        'pos' => $pos,
-                        'example' => $rows[$idx]['example'] ?? null,
-                    ]);
-                    $counts['updated']++;
-
-                    continue;
-                }
-
-                $deck->cards()->create([
-                    'order' => ++$order,
-                    'term' => $line['term'],
-                    'meaning' => $line['meaning'],
-                    'ipa' => $ipa,
-                    'pos' => $pos,
-                    'example' => $rows[$idx]['example'] ?? null,
-                ]);
-                $counts['created']++;
-            }
-        });
-
-        return $counts;
+        return $this->cards->importRows($deck, $preview['rows'], $rows, $autoIpa, $overwrite);
     }
 }

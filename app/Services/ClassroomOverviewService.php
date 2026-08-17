@@ -3,9 +3,8 @@
 namespace App\Services;
 
 use App\Models\Classroom;
-use App\Models\Mission;
-use App\Models\TestAttempt;
 use App\Models\User;
+use App\Repositories\ClassroomAnalyticsRepository;
 use Illuminate\Support\Collection;
 
 class ClassroomOverviewService
@@ -13,6 +12,7 @@ class ClassroomOverviewService
     public function __construct(
         private readonly ClassroomStatsService $stats,
         private readonly ClassSessionService $sessions,
+        private readonly ClassroomAnalyticsRepository $analytics,
     ) {}
 
     /**
@@ -21,14 +21,10 @@ class ClassroomOverviewService
     public function forClass(Classroom $classroom): array
     {
         $stats = $this->stats->forClass($classroom);
-        $students = $classroom->students()->get();
+        $students = $this->analytics->students($classroom);
         $totalStudents = $students->count();
 
-        $activeStudents = TestAttempt::where('classroom_id', $classroom->id)
-            ->assigned()
-            ->where('submitted_at', '>=', now()->subDays(30))
-            ->distinct('user_id')
-            ->count('user_id');
+        $activeStudents = $this->analytics->activeStudents($classroom);
 
         $atRisk = $this->atRisk($classroom, $students);
 
@@ -58,18 +54,8 @@ class ClassroomOverviewService
         $result = [];
 
         foreach ($students as $student) {
-            $overdue = Mission::where('classroom_id', $classroom->id)
-                ->where('user_id', $student->id)
-                ->where('status', 'todo')
-                ->whereNotNull('due_date')
-                ->whereDate('due_date', '<', $today)
-                ->count();
-
-            $avg = (float) (TestAttempt::where('classroom_id', $classroom->id)
-                ->where('user_id', $student->id)
-                ->assigned()
-                ->scored()
-                ->avg('total_score') ?? 0);
+            $overdue = $this->analytics->overdueMissions($classroom, $student, $today);
+            $avg = $this->analytics->studentAverage($classroom, $student);
 
             $reason = null;
             $tag = null;

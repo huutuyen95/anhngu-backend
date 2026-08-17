@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Test\DeleteTestRequest;
+use App\Http\Requests\Test\ListAdminTestsRequest;
+use App\Http\Requests\Test\MoveTestCategoryRequest;
 use App\Http\Requests\Test\SaveStructureRequest;
 use App\Http\Requests\Test\StoreTestRequest;
 use App\Http\Requests\Test\UpdateTestRequest;
@@ -17,10 +20,10 @@ class AdminTestController extends Controller
 {
     public function __construct(private readonly AdminTestService $tests) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(ListAdminTestsRequest $request): JsonResponse
     {
         $page = $this->tests->list(
-            $request->only(['q', 'skill', 'is_published', 'sort', 'dir', 'per_page']),
+            $request->validated(),
             $request->user(),
         );
 
@@ -44,14 +47,7 @@ class AdminTestController extends Controller
 
     public function show(Test $test): JsonResponse
     {
-        $test->load([
-            'parts' => fn ($q) => $q->orderBy('order'),
-            'parts.sections' => fn ($q) => $q->orderBy('order'),
-            'parts.sections.questions' => fn ($q) => $q->orderBy('order'),
-            'parts.sections.questions.options',
-        ]);
-
-        return response()->json(['test' => new TestDetailResource($test, revealAnswers: true, forTeacher: true)]);
+        return response()->json(['test' => new TestDetailResource($this->tests->detail($test), revealAnswers: true, forTeacher: true)]);
     }
 
     public function update(UpdateTestRequest $request, Test $test): JsonResponse
@@ -61,11 +57,11 @@ class AdminTestController extends Controller
         return response()->json(['test' => new TestResource($updated)]);
     }
 
-    public function destroy(Request $request, Test $test): JsonResponse
+    public function destroy(DeleteTestRequest $request, Test $test): JsonResponse
     {
-        $attemptsCount = $test->attempts()->count();
+        $attemptsCount = $this->tests->attemptsCount($test);
 
-        if ($attemptsCount > 0 && ! $request->boolean('force')) {
+        if ($attemptsCount > 0 && ! $request->validated('force', false)) {
             return response()->json([
                 'attempts_count' => $attemptsCount,
                 'message' => "Đề đã có {$attemptsCount} bài làm. Xoá sẽ mất toàn bộ, không khôi phục được.",
@@ -84,11 +80,9 @@ class AdminTestController extends Controller
         return response()->json(['test' => new TestResource($copy)], 201);
     }
 
-    public function moveCategory(Request $request, Test $test): JsonResponse
+    public function moveCategory(MoveTestCategoryRequest $request, Test $test): JsonResponse
     {
-        $data = $request->validate([
-            'category_id' => ['nullable', 'integer', 'exists:test_categories,id'],
-        ]);
+        $data = $request->validated();
 
         $updated = $this->tests->moveCategory($test, $data['category_id'] ?? null);
 

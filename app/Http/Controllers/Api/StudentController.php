@@ -2,18 +2,19 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Enums\UserRole;
+use App\Exports\StudentsTemplateExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Student\BulkStudentRequest;
+use App\Http\Requests\Student\CheckStudentEmailRequest;
+use App\Http\Requests\Student\DeleteStudentRequest;
 use App\Http\Requests\Student\ImportStudentRequest;
+use App\Http\Requests\Student\ListStudentsRequest;
+use App\Http\Requests\Student\SetStudentStatusRequest;
 use App\Http\Requests\Student\StoreStudentRequest;
 use App\Http\Requests\Student\UpdateStudentRequest;
 use App\Http\Resources\StudentResource;
-use App\Imports\StudentsImport;
-use App\Models\User;
 use App\Services\StudentService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -21,11 +22,9 @@ class StudentController extends Controller
 {
     public function __construct(private readonly StudentService $students) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(ListStudentsRequest $request): JsonResponse
     {
-        $page = $this->students->list($request->only([
-            'q', 'classroom_id', 'is_active', 'trashed', 'sort', 'dir', 'per_page',
-        ]));
+        $page = $this->students->list($request->validated());
 
         return response()->json([
             'data' => StudentResource::collection($page->items()),
@@ -50,39 +49,38 @@ class StudentController extends Controller
 
     public function update(UpdateStudentRequest $request, int $student): JsonResponse
     {
-        $model = $this->resolve($student);
+        $model = $this->students->resolve($student);
         $updated = $this->students->update($model, $request->validated());
 
         return response()->json(['student' => new StudentResource($updated)]);
     }
 
-    public function destroy(Request $request, int $student): JsonResponse
+    public function destroy(DeleteStudentRequest $request, int $student): JsonResponse
     {
-        $model = $this->resolve($student, withTrashed: true);
+        $model = $this->students->resolve($student, withTrashed: true);
 
         if ($request->boolean('force')) {
-            $model->forceDelete();
+            $this->students->delete($model, true);
 
             return response()->json(['message' => 'Đã xoá vĩnh viễn.']);
         }
 
-        $model->delete();
+        $this->students->delete($model, false);
 
         return response()->json(['message' => 'Đã chuyển vào thùng rác.']);
     }
 
     public function restore(int $student): JsonResponse
     {
-        $model = $this->resolve($student, withTrashed: true);
-        $model->restore();
+        $model = $this->students->restore($this->students->resolve($student, withTrashed: true));
 
-        return response()->json(['student' => new StudentResource($model->load('classes:id,name'))]);
+        return response()->json(['student' => new StudentResource($model)]);
     }
 
-    public function status(Request $request, int $student): JsonResponse
+    public function status(SetStudentStatusRequest $request, int $student): JsonResponse
     {
-        $data = $request->validate(['is_active' => ['required', 'boolean']]);
-        $model = $this->resolve($student);
+        $data = $request->validated();
+        $model = $this->students->resolve($student);
 
         return response()->json([
             'student' => new StudentResource($this->students->setStatus($model, $data['is_active'])),
@@ -98,7 +96,7 @@ class StudentController extends Controller
 
     public function resetPassword(int $student): JsonResponse
     {
-        $model = $this->resolve($student);
+        $model = $this->students->resolve($student);
         $password = $this->students->resetPassword($model);
 
         return response()->json(['temp_password' => $password]);
@@ -106,50 +104,24 @@ class StudentController extends Controller
 
     public function import(ImportStudentRequest $request): JsonResponse
     {
-        $sheets = Excel::toArray(new StudentsImport, $request->file('file'));
-        $rows = $sheets[0] ?? [];
-
-        if ($request->boolean('dry_run')) {
-            return response()->json($this->students->previewImport($rows));
-        }
-
         $onDuplicate = $request->input('on_duplicate') === 'update' ? 'update' : 'skip';
 
-        return response()->json($this->students->commitImport($rows, $onDuplicate));
+        return response()->json($this->students->importFile($request->file('file'), $request->boolean('dry_run'), $onDuplicate));
     }
 
     /** Kiểm tra email đã tồn tại chưa (kể cả đã xoá mềm) — dùng cho blur ở form thêm/sửa. */
-    public function checkEmail(Request $request): JsonResponse
+    public function checkEmail(CheckStudentEmailRequest $request): JsonResponse
     {
-        $data = $request->validate([
-            'email' => ['required', 'email'],
-            'ignore_id' => ['nullable', 'integer'],
-        ]);
+        $data = $request->validated();
 
-        $exists = User::withTrashed()
-            ->where('email', $data['email'])
-            ->when($data['ignore_id'] ?? null, fn ($q, $id) => $q->where('id', '!=', $id))
-            ->exists();
-
-        return response()->json(['available' => ! $exists]);
+        return response()->json(['available' => $this->students->emailAvailable($data['email'], $data['ignore_id'] ?? null)]);
     }
 
     public function importTemplate(): BinaryFileResponse
     {
         return Excel::download(
-            new \App\Exports\StudentsTemplateExport,
+            new StudentsTemplateExport,
             'mau-import-hoc-sinh.xlsx',
         );
-    }
-
-    /** Lấy học sinh theo id, đảm bảo đúng vai trò student. */
-    private function resolve(int $id, bool $withTrashed = false): User
-    {
-        $query = User::query()->where('role', UserRole::Student);
-        if ($withTrashed) {
-            $query->withTrashed();
-        }
-
-        return $query->findOrFail($id);
     }
 }

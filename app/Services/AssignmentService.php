@@ -2,23 +2,24 @@
 
 namespace App\Services;
 
-use App\Enums\UserRole;
-use App\Models\ClassSession;
 use App\Models\Classroom;
-use App\Models\Mission;
-use App\Models\SessionItem;
+use App\Models\Deck;
+use App\Models\Document;
+use App\Models\Test;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
+use App\Repositories\AssignmentRepository;
 
 class AssignmentService
 {
+    public function __construct(private readonly AssignmentRepository $assignments) {}
+
     /** Map type từ FE → model class. */
     private const TYPE_MAP = [
-        'test' => \App\Models\Test::class,
-        'writing' => \App\Models\Test::class, // writing cũng là 1 Test (skill=writing)
-        'deck' => \App\Models\Deck::class,
-        'document' => \App\Models\Document::class,
-        'lecture' => \App\Models\Document::class,
+        'test' => Test::class,
+        'writing' => Test::class, // writing cũng là 1 Test (skill=writing)
+        'deck' => Deck::class,
+        'document' => Document::class,
+        'lecture' => Document::class,
     ];
 
     /**
@@ -29,17 +30,14 @@ class AssignmentService
      */
     public function assign(Classroom $classroom, array $data, User $teacher): array
     {
-        $session = ClassSession::where('classroom_id', $classroom->id)
-            ->findOrFail($data['class_session_id']);
+        $session = $this->assignments->session($classroom, $data['class_session_id']);
 
         // Xác định học viên nhận bài.
         $targetIds = ($data['student_ids'] ?? null)
             ? collect($data['student_ids'])
-            : $classroom->students()->pluck('users.id');
+            : $this->assignments->studentIds($classroom);
 
-        $students = User::whereIn('id', $targetIds)
-            ->where('role', UserRole::Student)
-            ->get();
+        $students = $this->assignments->students($targetIds);
 
         $active = $students->where('is_active', true);
         $excludedLocked = $students->count() - $active->count();
@@ -54,7 +52,7 @@ class AssignmentService
         $created = 0;
         $duplicates = 0;
 
-        DB::transaction(function () use (
+        $this->assignments->transaction(function () use (
             $classroom, $session, $data, $teacher, $active, $status, $scheduledAt, &$created, &$duplicates
         ) {
             foreach ($data['items'] as $item) {
@@ -62,27 +60,16 @@ class AssignmentService
                 if (! $modelClass) {
                     continue;
                 }
-                $model = $modelClass::find($item['id']);
+                $model = $this->assignments->content($modelClass, $item['id']);
                 if (! $model) {
                     continue;
                 }
 
                 // Gắn nội dung vào buổi (nếu chưa có).
-                SessionItem::firstOrCreate(
-                    [
-                        'class_session_id' => $session->id,
-                        'itemable_type' => $model->getMorphClass(),
-                        'itemable_id' => $model->id,
-                    ],
-                    ['order' => (SessionItem::where('class_session_id', $session->id)->max('order') ?? 0) + 1],
-                );
+                $this->assignments->assignItem($session, $model);
 
                 foreach ($active as $student) {
-                    $exists = Mission::where('user_id', $student->id)
-                        ->where('classroom_id', $classroom->id)
-                        ->where('missionable_type', $model->getMorphClass())
-                        ->where('missionable_id', $model->id)
-                        ->exists();
+                    $exists = $this->assignments->missionExists($student->id, $classroom, $model);
 
                     if ($exists) {
                         $duplicates++;
@@ -90,7 +77,7 @@ class AssignmentService
                         continue;
                     }
 
-                    Mission::create([
+                    $this->assignments->createMission([
                         'user_id' => $student->id,
                         'assigned_by' => $teacher->id,
                         'classroom_id' => $classroom->id,
@@ -125,9 +112,11 @@ class AssignmentService
     public function remind(Classroom $classroom): int
     {
         // MVP: đếm số HS còn mission 'todo' trong lớp (thông báo thực gửi ở giai đoạn hạ tầng notify).
-        return Mission::where('classroom_id', $classroom->id)
-            ->where('status', 'todo')
-            ->distinct('user_id')
-            ->count('user_id');
+        return $this->assignments->todoCount($classroom);
+    }
+
+    public function classroom(int $id): Classroom
+    {
+        return $this->assignments->classroom($id);
     }
 }

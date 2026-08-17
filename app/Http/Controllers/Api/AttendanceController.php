@@ -4,11 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Exports\AttendanceExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Attendance\BulkAttendanceRequest;
 use App\Models\ClassSession;
 use App\Services\AttendanceService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -21,14 +20,9 @@ class AttendanceController extends Controller
         return response()->json(['data' => $this->attendance->forSession($session)]);
     }
 
-    public function bulk(Request $request, ClassSession $session): JsonResponse
+    public function bulk(BulkAttendanceRequest $request, ClassSession $session): JsonResponse
     {
-        $data = $request->validate([
-            'items' => ['required', 'array'],
-            'items.*.user_id' => ['required', 'integer'],
-            'items.*.status' => ['required', Rule::in(['on_time', 'late', 'absent'])],
-            'items.*.comment' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $request->validated();
 
         $count = $this->attendance->bulkUpsert($session, $data['items'], $request->user());
 

@@ -3,19 +3,21 @@
 namespace App\Services;
 
 use App\Enums\QuestionType;
-use App\Models\AttemptAnswer;
 use App\Models\Question;
 use App\Models\TestAttempt;
 use App\Models\User;
+use App\Repositories\AttemptRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Chấm tay bài làm (chủ yếu câu writing) — tách khỏi TestGradingService (chấm tự động lúc nộp bài).
  */
 class AttemptGradingService
 {
-    public function __construct(private readonly TestGradingService $gradingService) {}
+    public function __construct(
+        private readonly TestGradingService $gradingService,
+        private readonly AttemptRepository $attempts,
+    ) {}
 
     /**
      * Danh sách bài làm cần/đã chấm. KHÔNG có `status` → trả mọi trạng thái (tab "Tất cả"
@@ -25,31 +27,12 @@ class AttemptGradingService
      */
     public function list(array $filters): LengthAwarePaginator
     {
-        return TestAttempt::query()
-            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
-            ->when($filters['classroom_id'] ?? null, fn ($q, $id) => $q->where('classroom_id', $id))
-            ->when($filters['test_id'] ?? null, fn ($q, $id) => $q->where('test_id', $id))
-            ->when($filters['user_id'] ?? null, fn ($q, $id) => $q->where('user_id', $id))
-            // Lọc theo nguồn: `assignment` = bài giao trong lớp, `library` = em tự luyện.
-            ->when($filters['source'] ?? null, fn ($q, $source) => $q->where('source', $source))
-            ->with(['user:id,name,email', 'test:id,title,skill', 'classroom:id,name'])
-            ->orderByDesc('submitted_at')
-            ->paginate((int) ($filters['per_page'] ?? 15))
-            ->withQueryString();
+        return $this->attempts->paginateForGrading($filters);
     }
 
     public function show(TestAttempt $attempt): TestAttempt
     {
-        return $attempt->load([
-            'user:id,name,email',
-            'classroom:id,name',
-            'test',
-            'test.parts' => fn ($q) => $q->orderBy('order'),
-            'test.parts.sections' => fn ($q) => $q->orderBy('order'),
-            'test.parts.sections.questions' => fn ($q) => $q->orderBy('order'),
-            'test.parts.sections.questions.options',
-            'answers.gradedBy:id,name',
-        ]);
+        return $this->attempts->loadForGrading($attempt);
     }
 
     /**
@@ -61,10 +44,8 @@ class AttemptGradingService
      */
     public function grade(TestAttempt $attempt, array $answers, User $teacher): TestAttempt
     {
-        return DB::transaction(function () use ($attempt, $answers, $teacher) {
-            $questions = Question::whereIn('id', collect($answers)->pluck('question_id'))
-                ->get()
-                ->keyBy('id');
+        return $this->attempts->transaction(function () use ($attempt, $answers, $teacher) {
+            $questions = $this->attempts->questions(collect($answers)->pluck('question_id'));
 
             foreach ($answers as $row) {
                 $question = $questions->get($row['question_id']);
@@ -74,21 +55,18 @@ class AttemptGradingService
 
                 $score = min((float) $row['score'], (float) $question->score);
 
-                AttemptAnswer::updateOrCreate(
-                    ['test_attempt_id' => $attempt->id, 'question_id' => $question->id],
-                    [
-                        'score' => $score,
-                        'is_correct' => in_array($question->type, [QuestionType::Writing, QuestionType::Speaking], true)
-                            ? null
-                            : $score >= (float) $question->score,
-                        'feedback' => $row['feedback'] ?? null,
-                        'graded_by' => $teacher->id,
-                        'graded_at' => now(),
-                    ]
-                );
+                $this->attempts->gradeAnswer($attempt, $question, [
+                    'score' => $score,
+                    'is_correct' => in_array($question->type, [QuestionType::Writing, QuestionType::Speaking], true)
+                        ? null
+                        : $score >= (float) $question->score,
+                    'feedback' => $row['feedback'] ?? null,
+                    'graded_by' => $teacher->id,
+                    'graded_at' => now(),
+                ]);
             }
 
-            $correctCount = $attempt->answers()->where('is_correct', true)->count();
+            $correctCount = $this->attempts->correctAnswerCount($attempt);
 
             // Quy về thang điểm của đề, GIỐNG chấm tự động. Trước đây cộng thô
             // attempt_answers.score (editor luôn lưu question.score = 1) nên writing
@@ -114,7 +92,7 @@ class AttemptGradingService
      */
     private function scaleToTestScore(TestAttempt $attempt): float
     {
-        $test = $attempt->test()->with('parts.sections.questions')->firstOrFail();
+        $test = $this->attempts->gradingTest($attempt);
 
         $maxScore = (float) $test->parts
             ->flatMap(fn ($part) => $part->sections)
@@ -125,7 +103,7 @@ class AttemptGradingService
             return 0.0;
         }
 
-        $rawScore = (float) $attempt->answers()->sum('score');
+        $rawScore = $this->attempts->rawScore($attempt);
 
         return round($rawScore / $maxScore * (float) $test->total_score, 2);
     }
