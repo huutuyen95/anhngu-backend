@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Profile\UpdatePasswordRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
 use App\Http\Requests\Profile\UploadAvatarRequest;
+use App\Http\Responses\ApiResponse;
 use App\Services\ProfileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,7 +39,9 @@ class ProfileController extends Controller
 
     public function updatePassword(UpdatePasswordRequest $request): JsonResponse
     {
-        return response()->json(['message' => 'Đã đổi mật khẩu.', 'token' => $this->profiles->updatePassword($request->user(), $request->validated())]);
+        return ApiResponse::message('Đã đổi mật khẩu.', additional: [
+            'token' => $this->profiles->updatePassword($request->user(), $request->validated()),
+        ]);
     }
 
     public function logoutOthers(Request $request): JsonResponse

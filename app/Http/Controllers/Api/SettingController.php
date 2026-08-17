@@ -8,6 +8,7 @@ use App\Http\Requests\Setting\MailTestRequest;
 use App\Http\Requests\Setting\ResetSettingsRequest;
 use App\Http\Requests\Setting\UpdateSettingsRequest;
 use App\Http\Requests\Setting\UploadSettingFileRequest;
+use App\Http\Responses\ApiResponse;
 use App\Models\SettingChange;
 use App\Services\SettingService;
 use Illuminate\Http\JsonResponse;
@@ -32,7 +33,7 @@ class SettingController extends Controller
     {
         $this->settings->resetSettings($request->validated());
 
-        return response()->json(['message' => 'Đã khôi phục mặc định.']);
+        return ApiResponse::message('Đã khôi phục mặc định.');
     }
 
     public function upload(UploadSettingFileRequest $request): JsonResponse
@@ -46,7 +47,7 @@ class SettingController extends Controller
     {
         $this->settings->deleteFile($request->validated('key'));
 
-        return response()->json(['message' => 'Đã xoá tệp.']);
+        return ApiResponse::message('Đã xoá tệp.');
     }
 
     public function changes(): JsonResponse
@@ -58,7 +59,7 @@ class SettingController extends Controller
     {
         $this->settings->revert($change);
 
-        return response()->json(['message' => 'Đã hoàn tác thay đổi.']);
+        return ApiResponse::message('Đã hoàn tác thay đổi.');
     }
 
     public function mailTest(MailTestRequest $request): JsonResponse

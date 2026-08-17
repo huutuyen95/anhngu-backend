@@ -111,6 +111,14 @@ Giáo viên / admin (`role:teacher,admin`):
 
 ## Quy ước
 
+- **API response:** model/entity trả ra ngoài phải đi qua `app/Http/Resources/`; không map field
+  model trực tiếp trong controller. Danh sách phân trang dùng `ApiResponse::paginated(...)` với
+  contract `{ data, meta: { current_page, last_page, per_page, from, to, total } }`; danh sách
+  thường dùng `ApiResponse::collection(...)`; thao tác chỉ cần thông báo dùng
+  `ApiResponse::message(...)`. Các key entity cũ của API v1 (`student`, `test`, `deck`,
+  `document`, `article`...) được giữ qua `ApiResponse::resource(...)` để không phá frontend;
+  endpoint mới ưu tiên key `data` mặc định. Roadmap, grading, import preview, settings và report
+  là DTO nghiệp vụ nên giữ shape riêng, không ép vào Resource.
 - **Bảo mật đáp án**: `QuestionOption` để `is_correct` trong `$hidden`, và `TestDetailResource`
   chỉ đưa `is_correct` + `explanation` vào output khi `revealAnswers: true`. Học sinh làm bài
   (`GET /tests/{test}`) → `revealAnswers: false`; endpoint kết quả sau khi nộp và khu admin sửa đề

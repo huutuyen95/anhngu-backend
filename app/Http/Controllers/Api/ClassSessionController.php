@@ -7,6 +7,7 @@ use App\Http\Requests\Classroom\ReorderClassSessionsRequest;
 use App\Http\Requests\Classroom\StoreClassSessionRequest;
 use App\Http\Requests\Classroom\SyncSessionsRequest;
 use App\Http\Requests\Classroom\UpdateClassSessionRequest;
+use App\Http\Responses\ApiResponse;
 use App\Models\Classroom;
 use App\Models\ClassSession;
 use App\Services\ClassSessionService;
@@ -41,7 +42,7 @@ class ClassSessionController extends Controller
     {
         $this->sessions->delete($session);
 
-        return response()->json(['message' => 'Đã xoá buổi học.']);
+        return ApiResponse::message('Đã xoá buổi học.');
     }
 
     public function sync(SyncSessionsRequest $request, Classroom $classroom): JsonResponse
@@ -72,6 +73,6 @@ class ClassSessionController extends Controller
 
         $this->sessions->reorder($data['ids']);
 
-        return response()->json(['message' => 'Đã cập nhật thứ tự.']);
+        return ApiResponse::message('Đã cập nhật thứ tự.');
     }
 }

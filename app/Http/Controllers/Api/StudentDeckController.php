@@ -7,8 +7,9 @@ use App\Http\Requests\Deck\CompleteDeckSessionRequest;
 use App\Http\Requests\Deck\StudyDeckRequest;
 use App\Http\Requests\Deck\UpdateCardProgressRequest;
 use App\Http\Resources\CardResource;
+use App\Http\Resources\StudentDeckResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Card;
-use App\Models\Classroom;
 use App\Models\Deck;
 use App\Services\StudentDeckService;
 use Illuminate\Http\JsonResponse;
@@ -22,7 +23,7 @@ class StudentDeckController extends Controller
     {
         $decks = $this->decks->library($request->user());
 
-        return response()->json(['data' => $decks->map(fn (Deck $d) => ['id' => $d->id, 'name' => $d->name, 'cards_count' => $d->cards_count, 'learned_count' => $d->learned_count, 'category' => $d->category ? ['id' => $d->category->id, 'name' => $d->category->name, 'order' => $d->category->order] : null, 'classrooms' => $d->classrooms->map(fn (Classroom $c) => ['id' => $c->id, 'name' => $c->name])->values()])]);
+        return ApiResponse::collection(StudentDeckResource::collection($decks));
     }
 
     public function study(StudyDeckRequest $request, Deck $deck): JsonResponse

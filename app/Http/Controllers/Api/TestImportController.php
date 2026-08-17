@@ -7,6 +7,7 @@ use App\Http\Requests\Test\CommitImportedTestRequest;
 use App\Http\Requests\Test\ImportTestDryRunRequest;
 use App\Http\Requests\Test\UploadSectionAudioRequest;
 use App\Http\Resources\TestResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Test;
 use App\Models\TestSection;
 use App\Services\TestImportService;
@@ -29,7 +30,7 @@ class TestImportController extends Controller
 
     public function commit(CommitImportedTestRequest $request): JsonResponse
     {
-        return response()->json(['test' => new TestResource($this->imports->commit($request->validated(), $request->user()))], 201);
+        return ApiResponse::resource(new TestResource($this->imports->commit($request->validated(), $request->user())), 'test', 201);
     }
 
     public function sectionAudio(UploadSectionAudioRequest $request, Test $test, TestSection $section): JsonResponse

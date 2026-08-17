@@ -8,6 +8,7 @@ use App\Http\Requests\Attempt\SaveAttemptAnswersRequest;
 use App\Http\Requests\Attempt\StartAttemptRequest;
 use App\Http\Requests\Attempt\UploadAttemptAudioRequest;
 use App\Http\Resources\TestDetailResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Question;
 use App\Models\Test;
 use App\Models\TestAttempt;
@@ -29,7 +30,7 @@ class TestAttemptController extends Controller
     {
         $this->attempts->saveAnswers($attempt, $request->validated('answers'));
 
-        return response()->json(['message' => 'Đã lưu bài làm.']);
+        return ApiResponse::message('Đã lưu bài làm.');
     }
 
     public function uploadAudio(UploadAttemptAudioRequest $request, TestAttempt $attempt, Question $question)
@@ -43,7 +44,7 @@ class TestAttemptController extends Controller
     {
         $this->audio->delete($attempt, $question);
 
-        return response()->json(['message' => 'Đã xoá bản ghi âm.']);
+        return ApiResponse::message('Đã xoá bản ghi âm.');
     }
 
     public function submit(OwnedAttemptRequest $request, TestAttempt $attempt)

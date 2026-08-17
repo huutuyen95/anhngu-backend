@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Classroom\AttachStudentsRequest;
 use App\Http\Requests\Classroom\QuickCreateStudentRequest;
 use App\Http\Resources\StudentResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Classroom;
 use App\Services\StudentService;
 use Illuminate\Http\JsonResponse;
@@ -18,7 +19,7 @@ class ClassStudentController extends Controller
     {
         $students = $this->students->classroomStudents($classroom);
 
-        return response()->json(['data' => StudentResource::collection($students)]);
+        return ApiResponse::collection(StudentResource::collection($students));
     }
 
     public function store(AttachStudentsRequest $request, Classroom $classroom): JsonResponse
@@ -39,16 +40,15 @@ class ClassStudentController extends Controller
             'classroom_ids' => [$classroom->id],
         ]);
 
-        return response()->json([
-            'student' => new StudentResource($result['user']),
+        return ApiResponse::resource(new StudentResource($result['user']), 'student', 201, [
             'temp_password' => $result['password'],
-        ], 201);
+        ]);
     }
 
     public function destroy(Classroom $classroom, int $userId): JsonResponse
     {
         $this->students->detachFromClassroom($classroom, $userId);
 
-        return response()->json(['message' => 'Đã gỡ học viên khỏi lớp.']);
+        return ApiResponse::message('Đã gỡ học viên khỏi lớp.');
     }
 }

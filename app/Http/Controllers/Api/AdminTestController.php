@@ -11,6 +11,7 @@ use App\Http\Requests\Test\StoreTestRequest;
 use App\Http\Requests\Test\UpdateTestRequest;
 use App\Http\Resources\TestDetailResource;
 use App\Http\Resources\TestResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Test;
 use App\Services\AdminTestService;
 use Illuminate\Http\JsonResponse;
@@ -27,34 +28,26 @@ class AdminTestController extends Controller
             $request->user(),
         );
 
-        return response()->json([
-            'data' => TestResource::collection($page->items()),
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'last_page' => $page->lastPage(),
-                'per_page' => $page->perPage(),
-                'total' => $page->total(),
-            ],
-        ]);
+        return ApiResponse::paginated(TestResource::collection($page->items()), $page);
     }
 
     public function store(StoreTestRequest $request): JsonResponse
     {
         $test = $this->tests->create($request->validated(), $request->user());
 
-        return response()->json(['test' => new TestResource($test)], 201);
+        return ApiResponse::resource(new TestResource($test), 'test', 201);
     }
 
     public function show(Test $test): JsonResponse
     {
-        return response()->json(['test' => new TestDetailResource($this->tests->detail($test), revealAnswers: true, forTeacher: true)]);
+        return ApiResponse::resource(new TestDetailResource($this->tests->detail($test), revealAnswers: true, forTeacher: true), 'test');
     }
 
     public function update(UpdateTestRequest $request, Test $test): JsonResponse
     {
         $updated = $this->tests->update($test, $request->validated());
 
-        return response()->json(['test' => new TestResource($updated)]);
+        return ApiResponse::resource(new TestResource($updated), 'test');
     }
 
     public function destroy(DeleteTestRequest $request, Test $test): JsonResponse
@@ -70,14 +63,14 @@ class AdminTestController extends Controller
 
         $this->tests->delete($test);
 
-        return response()->json(['message' => 'Đã xoá đề thi.']);
+        return ApiResponse::message('Đã xoá đề thi.');
     }
 
     public function duplicate(Test $test, Request $request): JsonResponse
     {
         $copy = $this->tests->duplicate($test, $request->user());
 
-        return response()->json(['test' => new TestResource($copy)], 201);
+        return ApiResponse::resource(new TestResource($copy), 'test', 201);
     }
 
     public function moveCategory(MoveTestCategoryRequest $request, Test $test): JsonResponse
@@ -86,7 +79,7 @@ class AdminTestController extends Controller
 
         $updated = $this->tests->moveCategory($test, $data['category_id'] ?? null);
 
-        return response()->json(['test' => new TestResource($updated)]);
+        return ApiResponse::resource(new TestResource($updated), 'test');
     }
 
     public function preflight(Test $test): JsonResponse
@@ -98,6 +91,6 @@ class AdminTestController extends Controller
     {
         $updated = $this->tests->saveStructure($test, $request->validated());
 
-        return response()->json(['test' => new TestDetailResource($updated, revealAnswers: true, forTeacher: true)]);
+        return ApiResponse::resource(new TestDetailResource($updated, revealAnswers: true, forTeacher: true), 'test');
     }
 }

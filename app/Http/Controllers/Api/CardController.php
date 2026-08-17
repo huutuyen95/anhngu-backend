@@ -12,6 +12,7 @@ use App\Http\Requests\Card\UpdateCardRequest;
 use App\Http\Requests\Card\UploadCardAudioRequest;
 use App\Http\Requests\Card\UploadCardImageRequest;
 use App\Http\Resources\CardResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Card;
 use App\Models\Deck;
 use App\Services\CardService;
@@ -25,26 +26,26 @@ class CardController extends Controller
 
     public function store(StoreCardRequest $request, Deck $deck): JsonResponse
     {
-        return response()->json(['card' => new CardResource($this->cards->create($deck, $request->validated()))], 201);
+        return ApiResponse::resource(new CardResource($this->cards->create($deck, $request->validated())), 'card', 201);
     }
 
     public function update(UpdateCardRequest $request, Card $card): JsonResponse
     {
-        return response()->json(['card' => new CardResource($this->cards->update($card, $request->validated()))]);
+        return ApiResponse::resource(new CardResource($this->cards->update($card, $request->validated())), 'card');
     }
 
     public function destroy(Card $card): JsonResponse
     {
         $this->cards->delete($card);
 
-        return response()->json(['message' => 'Đã xoá thẻ.']);
+        return ApiResponse::message('Đã xoá thẻ.');
     }
 
     public function reorder(ReorderCardsRequest $request, Deck $deck): JsonResponse
     {
         $this->cards->reorder($deck, $request->validated('ids'));
 
-        return response()->json(['message' => 'Đã cập nhật thứ tự.']);
+        return ApiResponse::message('Đã cập nhật thứ tự.');
     }
 
     public function uploadImage(UploadCardImageRequest $request, Card $card): JsonResponse
@@ -65,7 +66,7 @@ class CardController extends Controller
     {
         $this->cards->deleteAudio($card);
 
-        return response()->json(['message' => 'Đã xoá file audio, quay về đọc tự động.']);
+        return ApiResponse::message('Đã xoá file audio, quay về đọc tự động.');
     }
 
     public function ipaLookup(LookupIpaRequest $request): JsonResponse

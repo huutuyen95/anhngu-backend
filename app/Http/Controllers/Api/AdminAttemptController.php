@@ -7,6 +7,7 @@ use App\Http\Requests\Attempt\GradeAttemptRequest;
 use App\Http\Requests\Attempt\ListAttemptsRequest;
 use App\Http\Resources\AttemptDetailResource;
 use App\Http\Resources\AttemptResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\TestAttempt;
 use App\Services\AttemptGradingService;
 use Illuminate\Http\JsonResponse;
@@ -19,26 +20,18 @@ class AdminAttemptController extends Controller
     {
         $page = $this->attempts->list($request->validated());
 
-        return response()->json([
-            'data' => AttemptResource::collection($page->items()),
-            'meta' => [
-                'current_page' => $page->currentPage(),
-                'last_page' => $page->lastPage(),
-                'per_page' => $page->perPage(),
-                'total' => $page->total(),
-            ],
-        ]);
+        return ApiResponse::paginated(AttemptResource::collection($page->items()), $page);
     }
 
     public function show(TestAttempt $attempt): JsonResponse
     {
-        return response()->json(['attempt' => new AttemptDetailResource($this->attempts->show($attempt))]);
+        return ApiResponse::resource(new AttemptDetailResource($this->attempts->show($attempt)), 'attempt');
     }
 
     public function grade(GradeAttemptRequest $request, TestAttempt $attempt): JsonResponse
     {
         $graded = $this->attempts->grade($attempt, $request->validated()['answers'], $request->user());
 
-        return response()->json(['attempt' => new AttemptDetailResource($graded)]);
+        return ApiResponse::resource(new AttemptDetailResource($graded), 'attempt');
     }
 }

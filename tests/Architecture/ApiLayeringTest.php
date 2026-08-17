@@ -58,6 +58,18 @@ class ApiLayeringTest extends TestCase
         );
     }
 
+    #[DataProvider('controllerFiles')]
+    public function test_api_controllers_use_the_shared_pagination_response(string $file): void
+    {
+        $source = file_get_contents($file);
+
+        $this->assertStringNotContainsString(
+            '->currentPage()',
+            $source,
+            "Manual pagination metadata found in {$file}; use ApiResponse::paginated().",
+        );
+    }
+
     public static function controllerFiles(): array
     {
         return self::files(dirname(__DIR__, 2).'/app/Http/Controllers/Api');

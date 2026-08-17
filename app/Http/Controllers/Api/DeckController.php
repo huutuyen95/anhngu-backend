@@ -10,6 +10,7 @@ use App\Http\Requests\Deck\StoreDeckRequest;
 use App\Http\Requests\Deck\UpdateDeckRequest;
 use App\Http\Resources\CardResource;
 use App\Http\Resources\DeckResource;
+use App\Http\Responses\ApiResponse;
 use App\Models\Deck;
 use App\Services\DeckService;
 use Illuminate\Http\JsonResponse;
@@ -22,27 +23,24 @@ class DeckController extends Controller
     {
         $page = $this->decks->paginate($request->validated());
 
-        return response()->json([
-            'data' => DeckResource::collection($page->items()),
-            'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'total' => $page->total()],
-        ]);
+        return ApiResponse::paginated(DeckResource::collection($page->items()), $page);
     }
 
     public function store(StoreDeckRequest $request): JsonResponse
     {
         $deck = $this->decks->detail($this->decks->create($request->validated(), $request->user()));
 
-        return response()->json(['deck' => new DeckResource($deck)], 201);
+        return ApiResponse::resource(new DeckResource($deck), 'deck', 201);
     }
 
     public function show(Deck $deck): JsonResponse
     {
-        return response()->json(['deck' => new DeckResource($this->decks->detail($deck))]);
+        return ApiResponse::resource(new DeckResource($this->decks->detail($deck)), 'deck');
     }
 
     public function update(UpdateDeckRequest $request, Deck $deck): JsonResponse
     {
-        return response()->json(['deck' => new DeckResource($this->decks->detail($this->decks->update($deck, $request->validated())))]);
+        return ApiResponse::resource(new DeckResource($this->decks->detail($this->decks->update($deck, $request->validated()))), 'deck');
     }
 
     public function publish(PublishDeckRequest $request, Deck $deck): JsonResponse
@@ -64,16 +62,16 @@ class DeckController extends Controller
         }
         $this->decks->delete($deck);
 
-        return response()->json(['message' => 'Đã xoá bộ từ.']);
+        return ApiResponse::message('Đã xoá bộ từ.');
     }
 
     public function duplicate(Deck $deck): JsonResponse
     {
-        return response()->json(['deck' => new DeckResource($this->decks->detail($this->decks->duplicate($deck)))], 201);
+        return ApiResponse::resource(new DeckResource($this->decks->detail($this->decks->duplicate($deck))), 'deck', 201);
     }
 
     public function cards(ListCardsRequest $request, Deck $deck): JsonResponse
     {
-        return response()->json(['data' => CardResource::collection($this->decks->cards($deck, $request->validated()))]);
+        return ApiResponse::collection(CardResource::collection($this->decks->cards($deck, $request->validated())));
     }
 }
