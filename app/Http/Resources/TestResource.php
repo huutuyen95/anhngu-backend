@@ -2,13 +2,14 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Test;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
  * Đề thi ở dạng rút gọn (danh sách / tạo / sửa) — không kèm cây cấu trúc.
  *
- * @mixin \App\Models\Test
+ * @mixin Test
  */
 class TestResource extends JsonResource
 {
