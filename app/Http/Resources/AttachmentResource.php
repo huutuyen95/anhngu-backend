@@ -2,11 +2,12 @@
 
 namespace App\Http\Resources;
 
+use App\Models\DocumentAttachment;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin \App\Models\DocumentAttachment
+ * @mixin DocumentAttachment
  */
 class AttachmentResource extends JsonResource
 {

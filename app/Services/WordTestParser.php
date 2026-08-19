@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Str;
 use PhpOffice\PhpWord\Element\TextRun;
 use PhpOffice\PhpWord\IOFactory;
 
@@ -64,21 +65,25 @@ class WordTestParser
                 } else {
                     $passageBuffer[] = $html;
                 }
+
                 continue;
             }
 
             if (preg_match('/^PART\s+\d+/iu', $plain)) {
                 $newPart($plain);
+
                 continue;
             }
             if (preg_match('/^SECTION\s+\d+/iu', $plain)) {
                 $newSection();
+
                 continue;
             }
             if (preg_match('/^==PASSAGE\s*:?\s*(.*)$/i', $plain, $m)) {
                 $ensureSection();
                 $capturingPassage = true;
                 $passageBuffer = trim($m[1]) !== '' ? [trim($m[1])] : [];
+
                 continue;
             }
             if (preg_match('/^(?:Câu|Question)\s+\d+/iu', $plain)) {
@@ -95,6 +100,7 @@ class WordTestParser
                     '_da' => null,
                 ];
                 $qi = count($parts[$pi]['sections'][$si]['questions']) - 1;
+
                 continue;
             }
 
@@ -178,7 +184,7 @@ class WordTestParser
                     $summary[$status]++;
                     $questions[] = [
                         'n' => $q['_n'],
-                        'text' => \Illuminate\Support\Str::limit(strip_tags($q['content'] ?? ''), 120),
+                        'text' => Str::limit(strip_tags($q['content'] ?? ''), 120),
                         'type' => $type,
                         'status' => $status,
                         'reasons' => $reasons,

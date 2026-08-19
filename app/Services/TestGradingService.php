@@ -52,7 +52,7 @@ class TestGradingService
                 $status = 'submitted';
             }
 
-            $this->completeMission($attempt);
+            $this->completeMission($attempt, $test);
 
             return [
                 'total_score' => $graded['total_score'],
@@ -137,8 +137,16 @@ class TestGradingService
      * Trước đây không ai cập nhật missions.status cho đề thi (chỉ deck/document có), khiến báo
      * cáo lớp đếm "bài hoàn thành" theo missions luôn thiếu, lệch với % tiến độ trên roadmap.
      */
-    private function completeMission(TestAttempt $attempt): void
+    private function completeMission(TestAttempt $attempt, Test $test): void
     {
+        // Nhiệm vụ em TỰ ĐẶT ("Nhiệm vụ 7 ngày tới"): em bấm làm bài từ Thư viện nên lượt
+        // làm KHÔNG mang mission_id — phải đối chiếu theo nội dung mới biết là xong.
+        // Cố tình không truyền mission_id cho loại này: truyền vào thì lượt bị đánh dấu
+        // `source='assignment'` và lọt vào báo cáo lớp, trong khi đây là tự luyện.
+        if ($attempt->user) {
+            app(StudentMissionService::class)->markDone($attempt->user, $test);
+        }
+
         if (! $attempt->mission_id) {
             return;
         }

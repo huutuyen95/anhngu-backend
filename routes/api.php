@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentDeckController;
 use App\Http\Controllers\Api\StudentDocumentController;
+use App\Http\Controllers\Api\StudentMissionController;
 use App\Http\Controllers\Api\TestAttemptController;
 use App\Http\Controllers\Api\TestCategoryController;
 use App\Http\Controllers\Api\TestController;
@@ -55,6 +56,11 @@ Route::prefix('v1')->group(function () {
         Route::delete('me/avatar', [ProfileController::class, 'deleteAvatar']);
         Route::put('me/password', [ProfileController::class, 'updatePassword']);
         Route::post('me/logout-others', [ProfileController::class, 'logoutOthers']);
+
+        // Nhiệm vụ tự đặt — em tự thêm nội dung từ Thư viện, hạn 7 ngày.
+        Route::get('me/missions', [StudentMissionController::class, 'index']);
+        Route::post('me/missions', [StudentMissionController::class, 'store']);
+        Route::delete('me/missions/{mission}', [StudentMissionController::class, 'destroy']);
 
         // Lớp của em — khu học sinh
         Route::get('me/classrooms', [StudentClassroomController::class, 'index']);

@@ -71,6 +71,19 @@ class StudentTestService
     }
 
     /**
+     * Tóm tắt các lượt em đã làm đề này — cùng hình dạng với `attempt_summary` ở danh sách.
+     * Trang chi tiết cần nó để hiện "Xem kết quả lần trước" / "Tiếp tục bài đang làm dở".
+     *
+     * @return array<string, mixed>|null null = em chưa làm lần nào
+     */
+    public function attemptFor(User $student, Test $test): ?array
+    {
+        $attempts = $this->attemptsOf($student, collect([$test->id]))->get($test->id);
+
+        return $attempts ? $this->attemptSummary($attempts) : null;
+    }
+
+    /**
      * Số đếm cho hub card + badge lọc trạng thái. Tính trên toàn bộ đề khớp `q`/`skill`
      * (KHÔNG áp `status`) để badge vẫn hiện đủ 4 nhóm khi đang lọc theo một nhóm.
      *
@@ -176,9 +189,18 @@ class StudentTestService
             ->whereIn('status', self::FINALIZED_STATUSES)
             ->max(fn (TestAttempt $attempt) => (float) $attempt->total_score);
 
+        // Lượt ĐÃ NỘP gần nhất — khác `id` khi em đang làm dở một lượt mới. Có nó thì
+        // trang chi tiết vẫn mở được kết quả lần trước trong lúc lượt mới còn dang dở
+        // (mở result của lượt in_progress sẽ 404).
+        $lastResult = $attempts
+            ->whereIn('status', self::SUBMITTED_STATUSES)
+            ->sortByDesc('last_attempted_at')
+            ->first();
+
         return [
             // FE cần id để mở /tests/{id}/attempt/{attemptId} (Tiếp tục) hoặc .../result/{attemptId}.
             'id' => $current->id,
+            'last_result_id' => $lastResult?->id,
             'status' => $current->status,
             'bucket' => self::BUCKET_OF_STATUS[$current->status],
             'best_score' => $bestScore !== null ? (float) $bestScore : null,

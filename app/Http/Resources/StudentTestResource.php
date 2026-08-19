@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Test;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -13,7 +14,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
  *
  * `question_count` và `attempt_summary` do StudentTestService gắn vào model.
  *
- * @mixin \App\Models\Test
+ * @mixin Test
  */
 class StudentTestResource extends JsonResource
 {
