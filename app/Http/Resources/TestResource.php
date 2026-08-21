@@ -35,6 +35,7 @@ class TestResource extends JsonResource
             'shuffle_questions' => (bool) $this->shuffle_questions,
             'word_limit' => $this->word_limit,
             'rubric' => $this->rubric,
+            'ai_grading' => (bool) $this->ai_grading,
             'is_published' => (bool) $this->is_published,
             'question_count' => $this->when($this->question_count !== null, fn () => (int) $this->question_count),
             'created_at' => $this->created_at?->toIso8601String(),

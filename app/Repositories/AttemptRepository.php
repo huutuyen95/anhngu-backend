@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Enums\Skill;
 use App\Models\ActivityLog;
 use App\Models\AttemptAnswer;
 use App\Models\Mission;
@@ -25,6 +26,20 @@ class AttemptRepository
         foreach ($answers as $x) {
             AttemptAnswer::updateOrCreate(['test_attempt_id' => $a->id, 'question_id' => $x['question_id']], ['question_option_id' => $x['question_option_id'] ?? null, 'answer_text' => $x['answer_text'] ?? null]);
         }
+    }
+
+    /**
+     * Số lượt đề NÓI em đã tự mở hôm nay (không tính bài cô giao) — dùng cho hạn mức
+     * `content.speaking_attempts_per_day`.
+     */
+    public function speakingAttemptsToday(User $student): int
+    {
+        return TestAttempt::query()
+            ->where('user_id', $student->id)
+            ->whereNull('mission_id')
+            ->whereDate('started_at', now()->toDateString())
+            ->whereHas('test', fn ($q) => $q->where('skill', Skill::Speaking->value))
+            ->count();
     }
 
     public function mission(TestAttempt $a): mixed
@@ -163,6 +178,8 @@ class AttemptRepository
             'test.parts.sections.questions' => fn ($query) => $query->orderBy('order'),
             'test.parts.sections.questions.options',
             'answers.gradedBy:id,name',
+            // Gợi ý chấm của AI — chỉ nạp ở khu cô chấm, học viên không bao giờ thấy.
+            'aiSuggestions',
         ]);
     }
 

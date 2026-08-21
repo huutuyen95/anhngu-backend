@@ -7,7 +7,9 @@ RUN chmod +x /usr/local/bin/install-php-extensions \
     && install-php-extensions \
         pdo_mysql mbstring zip exif pcntl bcmath gd intl redis
 
-RUN apk add --no-cache git curl bash
+# ffmpeg: chuyển bản ghi của học viên (webm/mp4/ogg tuỳ trình duyệt) sang mp3 trước khi
+# gửi cho AI chấm — API chấm audio chỉ nhận mp3/wav.
+RUN apk add --no-cache git curl bash ffmpeg
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer

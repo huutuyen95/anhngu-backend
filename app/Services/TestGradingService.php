@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Enums\QuestionType;
 use App\Http\Resources\TestDetailResource;
+use App\Jobs\GradeAttemptWithAi;
 use App\Models\AttemptAnswer;
 use App\Models\Question;
 use App\Models\Test;
 use App\Models\TestAttempt;
 use App\Repositories\AttemptRepository;
+use App\Services\Ai\AiGradingService;
 
 class TestGradingService
 {
@@ -45,6 +47,7 @@ class TestGradingService
             // Đề có câu writing chưa chấm → chờ giáo viên chấm tay, không dedup/finalize điểm.
             if ($graded['has_pending_review']) {
                 $this->markPendingReview($attempt, $graded);
+                $this->requestAiGrading($attempt);
                 $isNewBest = false;
                 $status = 'pending_review';
             } else {
@@ -162,6 +165,24 @@ class TestGradingService
         if ($mission->classroom) {
             app(ClassroomStatsService::class)->forget($mission->classroom);
         }
+    }
+
+    /**
+     * Nhờ AI chấm nháp giúp cô — CHỈ khi cô đã bật và đã có khoá API.
+     *
+     * Đây là lớp phụ hoàn toàn: chưa cấu hình gì thì không có job nào được đẩy đi, luồng nộp
+     * bài chạy y hệt như trước khi có tính năng này. Job chạy nền nên dù AI có lỗi hay chậm,
+     * học viên vẫn nhận phản hồi "đã nộp, chờ cô chấm" ngay lập tức.
+     */
+    private function requestAiGrading(TestAttempt $attempt): void
+    {
+        if (! app(AiGradingService::class)->shouldGrade($attempt)) {
+            return;
+        }
+
+        // `afterCommit`: job chỉ chạy sau khi transaction nộp bài commit xong, tránh worker
+        // đọc phải dữ liệu chưa có.
+        GradeAttemptWithAi::dispatch($attempt->id)->afterCommit();
     }
 
     /**

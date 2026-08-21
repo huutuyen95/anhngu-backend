@@ -88,6 +88,8 @@ class DatabaseSeeder extends Seeder
         $this->seedSampleWritingTest($teacher);
         $this->seedSampleListeningTest($teacher);
         $this->seedSampleSpeakingTest($teacher);
+        // Phải chạy TRƯỚC các seeder khác: không có super admin thì khu Cài đặt bị khoá.
+        $this->call(SuperAdminSeeder::class);
         $this->call(IpaDictionarySeeder::class);
         $this->call(DocumentCategoriesSeeder::class);
         $this->call(VocabularyCategoryDemoSeeder::class);

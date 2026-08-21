@@ -207,6 +207,12 @@ class TestAttempt extends Model
         return $this->hasMany(AttemptAnswer::class);
     }
 
+    /** Đề xuất chấm của AI (khu cô chấm). Không phải điểm chính thức. */
+    public function aiSuggestions(): HasMany
+    {
+        return $this->hasMany(AttemptAiSuggestion::class);
+    }
+
     public function skillScores(): HasMany
     {
         return $this->hasMany(AttemptSkillScore::class);
