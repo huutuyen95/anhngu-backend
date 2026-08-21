@@ -31,6 +31,7 @@ class UpdateTestRequest extends FormRequest
             'shuffle_questions' => ['sometimes', 'boolean'],
             'word_limit' => ['nullable', 'integer', 'min:1'],
             'rubric' => ['nullable', 'string'],
+            'ai_grading' => ['sometimes', 'boolean'],
             'is_published' => ['sometimes', 'boolean'],
         ];
     }

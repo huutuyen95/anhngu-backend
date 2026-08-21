@@ -66,6 +66,7 @@ return [
                 'content.writing_min_words' => ['label' => 'Số từ tối thiểu (bài viết)', 'hint' => 'Cảnh báo nếu viết ít hơn mức này.', 'type' => 'int', 'default' => 80, 'unit' => 'từ', 'rules' => ['integer', 'min:0', 'max:2000']],
                 'content.listening_max_plays' => ['label' => 'Số lần nghe tối đa', 'hint' => 'Mặc định khi tạo phần nghe mới.', 'type' => 'int', 'default' => 2, 'unit' => 'lần', 'rules' => ['integer', 'min:1', 'max:10']],
                 'content.attempts_allowed' => ['label' => 'Số lần làm lại', 'hint' => 'Số lượt được phép cho mỗi đề.', 'type' => 'int', 'default' => 1, 'unit' => 'lượt', 'rules' => ['integer', 'min:1', 'max:20']],
+                'content.speaking_attempts_per_day' => ['label' => 'Lượt làm bài nói mỗi ngày', 'hint' => 'Chỉ áp cho đề nói ở Thư viện / Nhiệm vụ. Bài cô giao vẫn theo số lượt của nhiệm vụ.', 'type' => 'int', 'default' => 3, 'unit' => 'lượt/ngày', 'rules' => ['integer', 'min:1', 'max:50']],
                 'content.deck_complete_pct' => ['label' => 'Ngưỡng hoàn thành bộ từ', 'hint' => 'Học thuộc bao nhiêu % thì tính là xong.', 'type' => 'int', 'default' => 80, 'unit' => '%', 'rules' => ['integer', 'min:10', 'max:100']],
             ],
         ],
@@ -85,6 +86,26 @@ return [
                 'notify.daily_send_time' => ['label' => 'Giờ gửi nhắc hằng ngày', 'hint' => 'Định dạng HH:MM.', 'type' => 'string', 'default' => '19:00', 'rules' => ['regex:/^([01]\d|2[0-3]):[0-5]\d$/']],
                 'notify.teacher_pending_grading' => ['label' => 'Nhắc cô có bài chờ chấm', 'hint' => 'Báo khi có bài viết/nói cần chấm tay.', 'type' => 'bool', 'default' => true],
                 'notify.teacher_cheat_alert' => ['label' => 'Cảnh báo gian lận cho cô', 'hint' => 'Báo khi có lượt bị gắn cờ nghi vấn.', 'type' => 'bool', 'default' => true],
+            ],
+        ],
+
+        // ── Chấm bài bằng AI ──────────────────────────────────────────────
+        // Mặc định TẮT và chưa có khoá → toàn bộ hệ thống chạy y như khi chưa có tính năng
+        // này: bài viết/nói vẫn vào hàng chờ cô chấm tay. Chỉ khi cô bật + dán khoá thì AI
+        // mới bắt đầu đề xuất điểm.
+        'ai' => [
+            'label' => 'Chấm bài bằng AI',
+            'desc' => 'TÍNH NĂNG SẼ PHÁT TRIỂN TRONG TƯƠNG LAI — hiện đang tạm khoá. Khi bật, AI sẽ tự đề xuất điểm và nhận xét cho bài viết / bài nói; cô vẫn là người duyệt cuối. Hiện tại cô dùng nút "Copy cho ChatGPT" ở màn chấm để tự chấm bằng tài khoản ChatGPT của mình.',
+            'icon' => 'sparkles',
+            'fields' => [
+                'ai.enabled' => ['label' => 'Bật chấm bằng AI', 'hint' => 'Tắt thì mọi bài viết/nói vào hàng chờ cô chấm tay như cũ.', 'type' => 'bool', 'default' => false, 'readonly' => true],
+                'ai.provider' => ['label' => 'Nhà cung cấp', 'hint' => 'Đổi nhà cung cấp không cần sửa code.', 'type' => 'string', 'default' => 'openai', 'options' => ['openai' => 'OpenAI (ChatGPT)'], 'rules' => ['in:openai'], 'readonly' => true],
+                'ai.api_key' => ['label' => 'Khoá API', 'hint' => 'Lấy ở platform.openai.com → API keys. Được mã hoá, không bao giờ hiển thị lại.', 'type' => 'string', 'default' => '', 'secret' => true, 'rules' => ['nullable', 'string', 'max:200'], 'readonly' => true],
+                'ai.text_model' => ['label' => 'Model chấm bài viết', 'hint' => 'Model rẻ đã đủ tốt cho bài viết ngắn.', 'type' => 'string', 'default' => 'gpt-5.4-mini', 'rules' => ['string', 'max:60'], 'readonly' => true],
+                'ai.audio_model' => ['label' => 'Model chấm bài nói', 'hint' => 'Phải là model nghe được audio.', 'type' => 'string', 'default' => 'gpt-audio', 'rules' => ['string', 'max:60'], 'readonly' => true],
+                'ai.monthly_budget_usd' => ['label' => 'Hạn mức mỗi tháng', 'hint' => 'Dùng hết thì ngừng chấm AI và báo cô; bài vẫn vào hàng chờ chấm tay.', 'type' => 'float', 'default' => 15.0, 'unit' => 'USD', 'rules' => ['numeric', 'min:0', 'max:1000'], 'readonly' => true],
+                'ai.grade_writing' => ['label' => 'Chấm bài viết', 'hint' => 'Cho AI đề xuất điểm câu viết.', 'type' => 'bool', 'default' => true, 'readonly' => true],
+                'ai.grade_speaking' => ['label' => 'Chấm bài nói', 'hint' => 'Cho AI nghe và đề xuất điểm câu nói. Tốn hơn bài viết khoảng 10 lần.', 'type' => 'bool', 'default' => true, 'readonly' => true],
             ],
         ],
 

@@ -61,13 +61,14 @@ class AdminTestService
             'scoring_method' => $data['scoring_method'] ?? 'scale_10_even',
             'word_limit' => $data['word_limit'] ?? null,
             'rubric' => $data['rubric'] ?? null,
+            'ai_grading' => $data['ai_grading'] ?? false,
             'is_published' => $data['is_published'] ?? false,
         ]);
     }
 
     public function update(Test $test, array $data): Test
     {
-        $fields = ['title', 'description', 'category_id', 'skill', 'is_combo', 'thumbnail_url', 'duration_minutes', 'total_score', 'scoring_method', 'shuffle_questions', 'word_limit', 'rubric', 'is_published'];
+        $fields = ['title', 'description', 'category_id', 'skill', 'is_combo', 'thumbnail_url', 'duration_minutes', 'total_score', 'scoring_method', 'shuffle_questions', 'word_limit', 'rubric', 'ai_grading', 'is_published'];
         $payload = array_intersect_key($data, array_flip($fields));
         if (array_key_exists('title', $payload) && $payload['title'] !== $test->title) {
             $payload['slug'] = $this->uniqueSlug($payload['title'], $test->id);

@@ -38,6 +38,7 @@ class TestDetailResource extends JsonResource
                 'attempts_count' => $this->attempts()->count(),
                 'is_published' => (bool) $this->is_published,
                 'rubric' => $this->rubric,
+                'ai_grading' => (bool) $this->ai_grading,
                 'scoring_method' => $this->scoring_method,
                 'shuffle_questions' => (bool) $this->shuffle_questions,
                 'is_combo' => (bool) $this->is_combo,

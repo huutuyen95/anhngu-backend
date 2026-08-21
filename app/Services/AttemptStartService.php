@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\Skill;
 use App\Models\Mission;
 use App\Models\Test;
 use App\Models\TestAttempt;
@@ -33,6 +34,8 @@ class AttemptStartService
         if ($mission) {
             $this->assertAttemptsLeft($mission);
         }
+
+        $this->assertSpeakingQuotaLeft($student, $test, $mission);
 
         return $this->attempts->transaction(function () use ($student, $test, $mission) {
             // Dọn lượt đang làm dở CÙNG NGUỒN (nếu có). Lượt dở ở nguồn kia phải giữ nguyên —
@@ -90,6 +93,30 @@ class AttemptStartService
         }
 
         return $mission;
+    }
+
+    /**
+     * Đề NÓI tốn tiền chấm AI (đắt hơn bài viết khoảng 10 lần) nên giới hạn số lượt mỗi
+     * ngày cho mỗi học viên.
+     *
+     * CHỈ áp cho lượt tự mở ở Thư viện / Nhiệm vụ. Bài cô giao đi theo `attempts_allowed`
+     * của nhiệm vụ — cô đã chủ động quyết định số lượt thì không chặn thêm.
+     */
+    private function assertSpeakingQuotaLeft(User $student, Test $test, ?Mission $mission): void
+    {
+        if ($mission || $test->skill !== Skill::Speaking) {
+            return;
+        }
+
+        $limit = max(1, (int) setting('content.speaking_attempts_per_day', 3));
+
+        $usedToday = $this->attempts->speakingAttemptsToday($student);
+
+        if ($usedToday >= $limit) {
+            throw ValidationException::withMessages([
+                'test_id' => "Hôm nay em đã làm {$limit} lượt bài nói rồi. Mai em quay lại luyện tiếp nhé!",
+            ]);
+        }
     }
 
     /** Bài giao mặc định chỉ được làm 1 lần — xem Mission::attemptsUsed(). */
