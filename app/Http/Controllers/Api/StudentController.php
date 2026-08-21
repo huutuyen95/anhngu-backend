@@ -94,9 +94,16 @@ class StudentController extends Controller
 
     public function import(ImportStudentRequest $request): JsonResponse
     {
-        $onDuplicate = $request->input('on_duplicate') === 'update' ? 'update' : 'skip';
+        $data = $request->validated();
+        $onDuplicate = ($data['on_duplicate'] ?? null) === 'update' ? 'update' : 'skip';
 
-        return response()->json($this->students->importFile($request->file('file'), $request->boolean('dry_run'), $onDuplicate));
+        return response()->json($this->students->importFile(
+            $request->file('file'),
+            $request->boolean('dry_run'),
+            $onDuplicate,
+            (int) ($data['offset'] ?? 0),
+            isset($data['limit']) ? (int) $data['limit'] : null,
+        ));
     }
 
     /** Kiểm tra email đã tồn tại chưa (kể cả đã xoá mềm) — dùng cho blur ở form thêm/sửa. */

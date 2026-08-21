@@ -11,6 +11,7 @@ use App\Repositories\StudentRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 
 class StudentService
@@ -202,6 +203,7 @@ class StudentService
                         'name' => $line['name'],
                         'email' => $line['email'],
                         'phone' => $rows[$idx]['phone'] ?? null,
+                        'note' => $rows[$idx]['note'] ?? null,
                         'classroom_ids' => $classroomIds,
                     ]);
                     $created[] = ['email' => $line['email'], 'password' => $result['password']];
@@ -211,6 +213,7 @@ class StudentService
                         $this->students->updateFields($existing, [
                             'name' => $line['name'] ?: $existing->name,
                             'phone' => $rows[$idx]['phone'] ?? $existing->phone,
+                            'note' => array_key_exists('note', $rows[$idx]) ? $rows[$idx]['note'] : $existing->note,
                         ]);
                         if ($classroomIds !== []) {
                             $this->classrooms->attachStudents($classroom, [$existing->id]);
@@ -255,9 +258,26 @@ class StudentService
         return ! $this->students->emailExists($email, $ignoreId);
     }
 
-    public function importFile(UploadedFile $file, bool $dryRun, string $onDuplicate): array
-    {
+    public function importFile(
+        UploadedFile $file,
+        bool $dryRun,
+        string $onDuplicate,
+        int $offset = 0,
+        ?int $limit = null,
+    ): array {
         $rows = Excel::toArray(new StudentsImport, $file)[0] ?? [];
+
+        if (! $dryRun && $limit === null && count($rows) > 100) {
+            throw ValidationException::withMessages([
+                'file' => ['File trên 100 dòng cần được import theo từng batch. Vui lòng tải lại trang và thử lại.'],
+            ]);
+        }
+
+        // Commit theo batch để việc hash mật khẩu của file lớn không làm một request
+        // vượt max_execution_time của PHP-FPM. Dry-run vẫn luôn xem toàn bộ file.
+        if (! $dryRun && $limit !== null) {
+            $rows = array_slice($rows, $offset, $limit);
+        }
 
         return $dryRun ? $this->previewImport($rows) : $this->commitImport($rows, $onDuplicate);
     }

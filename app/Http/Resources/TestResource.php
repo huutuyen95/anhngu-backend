@@ -27,6 +27,7 @@ class TestResource extends JsonResource
             'category_name' => $this->whenLoaded('category', fn () => $this->category?->name),
             'attempts_count' => $this->when($this->attempts_count !== null, fn () => (int) $this->attempts_count),
             'skill' => $this->skill->value,
+            'format' => $this->format ?? 'standard',
             'is_combo' => (bool) $this->is_combo,
             'thumbnail_url' => $this->thumbnail_url,
             'duration_minutes' => $this->duration_minutes,

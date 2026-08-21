@@ -6,7 +6,6 @@ use App\Models\Deck;
 use App\Models\User;
 use App\Repositories\DeckRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
 class DeckService
@@ -96,7 +95,7 @@ class DeckService
         $this->decks->delete($deck);
     }
 
-    public function cards(Deck $deck, array $filters): Collection
+    public function cards(Deck $deck, array $filters): LengthAwarePaginator
     {
         return $this->decks->cards($deck, $filters);
     }

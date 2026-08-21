@@ -7,12 +7,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Thư mục đề thi — gắn theo lớp, cây 2 cấp (parent_id null = gốc).
+ * Thư mục đề thi — kho toàn cục, phân theo NHÓM nội dung `group`:
+ * 'exam' (Đề thi) | 'exercise' (Bài tập). Cây 2 cấp (parent_id null = gốc).
  */
 class TestCategory extends Model
 {
+    public const GROUP_EXAM = 'exam';
+
+    public const GROUP_EXERCISE = 'exercise';
+
+    public const GROUPS = [self::GROUP_EXAM, self::GROUP_EXERCISE];
+
     protected $fillable = [
         'name',
+        'group',
         'classroom_id',
         'parent_id',
         'order',

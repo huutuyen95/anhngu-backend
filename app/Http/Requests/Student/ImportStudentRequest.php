@@ -18,6 +18,10 @@ class ImportStudentRequest extends FormRequest
     {
         return [
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:5120'],
+            'dry_run' => ['sometimes', 'boolean'],
+            'on_duplicate' => ['sometimes', 'string', 'in:skip,update'],
+            'offset' => ['sometimes', 'integer', 'min:0'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ];
     }
 }

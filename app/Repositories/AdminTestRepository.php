@@ -48,6 +48,7 @@ class AdminTestRepository
             ->when($teacher->role !== UserRole::Admin, fn ($query) => $query->where('created_by', $teacher->id))
             ->when($filters['q'] ?? null, fn ($query, $value) => $query->where('title', 'like', "%{$value}%"))
             ->when($filters['skill'] ?? null, fn ($query, $value) => $query->where('skill', $value))
+            ->when($filters['format'] ?? null, fn ($query, $value) => $query->where('format', $value))
             ->when(($filters['category_id'] ?? null) !== null && ($filters['category_id'] ?? '') !== '', fn ($query) => $query->where('category_id', (int) $filters['category_id']))
             ->when(array_key_exists('is_published', $filters) && $filters['is_published'] !== null && $filters['is_published'] !== '', fn ($query) => $query->where('is_published', filter_var($filters['is_published'], FILTER_VALIDATE_BOOLEAN)))
             ->orderBy($sort, $direction)

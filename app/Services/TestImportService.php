@@ -34,7 +34,7 @@ class TestImportService
 
     public function commit(array $data, User $user): Test
     {
-        $test = $this->tests->create(['title' => $data['title'], 'skill' => $data['skill'], 'category_id' => $data['category_id'] ?? null], $user);
+        $test = $this->tests->create(['title' => $data['title'], 'skill' => $data['skill'], 'format' => $data['format'] ?? null, 'category_id' => $data['category_id'] ?? null], $user);
         $parts = collect($data['parts'])->values()->map(fn ($part, $pi) => ['order' => $pi, 'title' => $part['title'] ?? 'Phần '.($pi + 1), 'sections' => collect($part['sections'] ?? [])->values()->map(fn ($s, $si) => ['order' => $si, 'instruction' => $s['instruction'] ?? null, 'passage' => $s['passage'] ?? null, 'audio_url' => $s['audio_url'] ?? null, 'max_plays' => $s['max_plays'] ?? null, 'questions' => collect($s['questions'] ?? [])->values()->map(fn ($q, $qi) => ['order' => $qi, 'type' => $q['type'] ?? 'multiple_choice', 'content' => $q['content'] ?? null, 'explanation' => $q['explanation'] ?? null, 'images' => [], 'record_limit_seconds' => null, 'score' => 1, 'options' => collect($q['options'] ?? [])->map(fn ($o) => ['label' => $o['label'] ?? null, 'content' => $o['content'] ?? '', 'is_correct' => (bool) ($o['is_correct'] ?? false)])->all()])->all()])->all()])->all();
         $this->tests->saveStructure($test, ['parts' => $parts]);
 

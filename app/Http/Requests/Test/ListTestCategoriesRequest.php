@@ -13,6 +13,6 @@ class ListTestCategoriesRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['classroom_id' => ['nullable', 'integer', 'exists:classrooms,id']];
+        return ['group' => ['nullable', 'string', 'in:exam,exercise']];
     }
 }

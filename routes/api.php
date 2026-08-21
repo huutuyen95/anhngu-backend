@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\SessionItemController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\StudentArticleController;
 use App\Http\Controllers\Api\StudentClassroomController;
+use App\Http\Controllers\Api\StudentReportController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentDeckController;
 use App\Http\Controllers\Api\StudentDocumentController;
@@ -64,6 +65,7 @@ Route::prefix('v1')->group(function () {
 
         // Lớp của em — khu học sinh
         Route::get('me/classrooms', [StudentClassroomController::class, 'index']);
+        Route::get('me/report', [StudentReportController::class, 'show']);
         Route::get('classrooms/{classroom}/roadmap', [StudentClassroomController::class, 'roadmap']);
 
         // Tài liệu & Bài giảng — khu học sinh
@@ -152,6 +154,7 @@ Route::prefix('v1')->group(function () {
             Route::get('decks/{deck}/cards', [DeckController::class, 'cards']);
             Route::post('decks/{deck}/cards', [CardController::class, 'store']);
             Route::put('decks/{deck}/cards/reorder', [CardController::class, 'reorder']);
+            Route::patch('cards/{card}/move', [CardController::class, 'move']);
             Route::post('decks/{deck}/cards/import', [CardController::class, 'import']);
             Route::put('cards/{card}', [CardController::class, 'update']);
             Route::delete('cards/{card}', [CardController::class, 'destroy']);

@@ -58,11 +58,11 @@ class TestCategoryAndActionsTest extends TestCase
 
     public function test_sync_creates_updates_deletes_and_reorders_in_one_request(): void
     {
-        $keep = TestCategory::create(['name' => 'Grammar', 'classroom_id' => $this->class->id, 'order' => 1]);
-        $drop = TestCategory::create(['name' => 'Bỏ', 'classroom_id' => $this->class->id, 'order' => 2]);
+        $keep = TestCategory::create(['name' => 'Grammar', 'group' => 'exam', 'order' => 1]);
+        $drop = TestCategory::create(['name' => 'Bỏ', 'group' => 'exam', 'order' => 2]);
 
         $this->actingAs($this->teacher)->putJson('/api/v1/admin/test-categories/sync', [
-            'classroom_id' => $this->class->id,
+            'group' => 'exam',
             'categories' => [
                 ['id' => $keep->id, 'name' => 'Ngữ pháp', 'order' => 2],
                 ['id' => null, 'name' => 'Nghe', 'order' => 1],
@@ -71,23 +71,23 @@ class TestCategoryAndActionsTest extends TestCase
         ])->assertOk()->assertJsonPath('moved_count', 0);
 
         $this->assertDatabaseHas('test_categories', ['id' => $keep->id, 'name' => 'Ngữ pháp', 'order' => 2]);
-        $this->assertDatabaseHas('test_categories', ['name' => 'Nghe', 'classroom_id' => $this->class->id]);
+        $this->assertDatabaseHas('test_categories', ['name' => 'Nghe', 'group' => 'exam']);
         $this->assertDatabaseMissing('test_categories', ['id' => $drop->id]);
     }
 
     public function test_deleting_category_with_tests_moves_them_to_uncategorized(): void
     {
-        $cat = TestCategory::create(['name' => 'Ôn tập', 'classroom_id' => $this->class->id, 'order' => 1]);
+        $cat = TestCategory::create(['name' => 'Ôn tập', 'group' => 'exercise', 'order' => 1]);
         $t1 = $this->makeTest(['category_id' => $cat->id]);
         $t2 = $this->makeTest(['category_id' => $cat->id]);
 
         $this->actingAs($this->teacher)->putJson('/api/v1/admin/test-categories/sync', [
-            'classroom_id' => $this->class->id,
+            'group' => 'exercise',
             'categories' => [],
             'deleted_ids' => [$cat->id],
         ])->assertOk()->assertJsonPath('moved_count', 2);
 
-        $fallback = TestCategory::where('classroom_id', $this->class->id)->where('name', 'Chưa phân loại')->first();
+        $fallback = TestCategory::where('group', 'exercise')->where('name', 'Chưa phân loại')->first();
         $this->assertNotNull($fallback);
         $this->assertEquals($fallback->id, $t1->fresh()->category_id);
         $this->assertEquals($fallback->id, $t2->fresh()->category_id);
@@ -128,9 +128,22 @@ class TestCategoryAndActionsTest extends TestCase
         $this->assertEquals(1, $copy->questionCount());
     }
 
+    public function test_lists_tests_filtered_by_format(): void
+    {
+        $this->makeTest(['title' => 'Chuẩn A', 'format' => 'standard']);
+        $this->makeTest(['title' => 'Chuẩn B', 'format' => 'standard']);
+        $this->makeTest(['title' => 'IELTS Sim', 'format' => 'ielts_simulation']);
+
+        $res = $this->actingAs($this->teacher)->getJson('/api/v1/admin/tests?format=ielts_simulation')->assertOk();
+        $titles = collect($res->json('data'))->pluck('title');
+        $this->assertContains('IELTS Sim', $titles);
+        $this->assertNotContains('Chuẩn A', $titles);
+        $this->assertSame('ielts_simulation', collect($res->json('data'))->firstWhere('title', 'IELTS Sim')['format']);
+    }
+
     public function test_move_category(): void
     {
-        $cat = TestCategory::create(['name' => 'Skills', 'classroom_id' => $this->class->id, 'order' => 1]);
+        $cat = TestCategory::create(['name' => 'Skills', 'group' => 'exam', 'order' => 1]);
         $test = $this->makeTest();
 
         $this->actingAs($this->teacher)->patchJson("/api/v1/admin/tests/{$test->id}/category", ['category_id' => $cat->id])

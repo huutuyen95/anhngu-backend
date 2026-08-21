@@ -93,6 +93,7 @@ class DatabaseSeeder extends Seeder
         $this->call(IpaDictionarySeeder::class);
         $this->call(DocumentCategoriesSeeder::class);
         $this->call(VocabularyCategoryDemoSeeder::class);
+        $this->call(TestCategoryGroupSeeder::class);
         $this->call(SystemBrandingSeeder::class);
         $this->call(ArticleDemoSeeder::class);
     }

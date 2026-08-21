@@ -14,9 +14,9 @@ class TestCategoryController extends Controller
 
     public function index(ListTestCategoriesRequest $request): JsonResponse
     {
-        $classroomId = isset($request->validated()['classroom_id']) ? (int) $request->validated()['classroom_id'] : null;
+        $group = $request->validated()['group'] ?? 'exam';
 
-        return response()->json(['data' => $this->categories->tree($classroomId)]);
+        return response()->json(['data' => $this->categories->tree($group)]);
     }
 
     public function sync(SyncTestCategoriesRequest $request): JsonResponse
@@ -24,13 +24,13 @@ class TestCategoryController extends Controller
         $data = $request->validated();
 
         $result = $this->categories->sync(
-            $data['classroom_id'] ?? null,
+            $data['group'],
             $data['categories'],
             $data['deleted_ids'] ?? [],
         );
 
         return response()->json([
-            'data' => $this->categories->tree($data['classroom_id'] ?? null),
+            'data' => $this->categories->tree($data['group']),
             'moved_count' => $result['moved_count'],
         ]);
     }

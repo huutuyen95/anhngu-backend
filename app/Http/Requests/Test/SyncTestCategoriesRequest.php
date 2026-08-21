@@ -14,7 +14,7 @@ class SyncTestCategoriesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'classroom_id' => ['nullable', 'integer', 'exists:classrooms,id'],
+            'group' => ['required', 'string', 'in:exam,exercise'],
             'categories' => ['present', 'array'],
             'categories.*.id' => ['nullable', 'integer', 'exists:test_categories,id'],
             'categories.*.name' => ['required', 'string', 'max:120'],

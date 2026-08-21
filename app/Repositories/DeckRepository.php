@@ -6,7 +6,6 @@ use App\Models\Card;
 use App\Models\Deck;
 use App\Models\SessionItem;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 class DeckRepository
@@ -91,13 +90,13 @@ class DeckRepository
         $deck->delete();
     }
 
-    public function cards(Deck $deck, array $filters): Collection
+    public function cards(Deck $deck, array $filters): LengthAwarePaginator
     {
         return $deck->cards()->when($filters['q'] ?? null, fn ($query, $value) => $query->where(fn ($where) => $where->where('term', 'like', "%{$value}%")->orWhere('meaning', 'like', "%{$value}%")->orWhere('example', 'like', "%{$value}%")))
             ->when(($filters['missing'] ?? null) === 'audio', fn ($query) => $query->whereNull('audio_url')->whereNull('ipa'))
             ->when(($filters['missing'] ?? null) === 'image', fn ($query) => $query->whereNull('image_url'))
             ->when(($filters['missing'] ?? null) === 'ipa', fn ($query) => $query->whereNull('ipa'))
             ->when(($filters['missing'] ?? null) === 'example', fn ($query) => $query->where(fn ($where) => $where->whereNull('example')->orWhere('example', '')))
-            ->orderBy('order')->get();
+            ->orderBy('order')->paginate($filters['per_page'] ?? 25)->withQueryString();
     }
 }

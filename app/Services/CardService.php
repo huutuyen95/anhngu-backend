@@ -49,6 +49,11 @@ class CardService
         $this->cards->reorder($deck, $orderedIds);
     }
 
+    public function move(Card $card, int $direction): void
+    {
+        $this->cards->move($card, $direction);
+    }
+
     public function uploadImage(Card $card, UploadedFile $file): Card
     {
         $path = $file->store('card-images', 'public');

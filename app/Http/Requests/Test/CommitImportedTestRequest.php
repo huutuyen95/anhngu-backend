@@ -13,6 +13,6 @@ class CommitImportedTestRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['title' => ['required', 'string', 'max:255'], 'skill' => ['required', 'string'], 'category_id' => ['nullable', 'integer', 'exists:test_categories,id'], 'parts' => ['required', 'array', 'min:1']];
+        return ['title' => ['required', 'string', 'max:255'], 'skill' => ['required', 'string'], 'format' => ['nullable', 'string', 'in:standard,ielts_simulation'], 'category_id' => ['nullable', 'integer', 'exists:test_categories,id'], 'parts' => ['required', 'array', 'min:1']];
     }
 }

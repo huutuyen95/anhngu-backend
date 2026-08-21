@@ -23,6 +23,7 @@ class StoreTestRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:500'],
             'category_id' => ['nullable', 'integer', 'exists:test_categories,id'],
             'skill' => ['required', Rule::enum(Skill::class)],
+            'format' => ['nullable', 'string', 'in:standard,ielts_simulation'],
             'is_combo' => ['sometimes', 'boolean'],
             'thumbnail_url' => ['nullable', 'string', 'max:2048'],
             'duration_minutes' => ['sometimes', 'integer', 'min:1'],

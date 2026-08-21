@@ -144,7 +144,7 @@ class StudentTest extends TestCase
         $existing = User::factory()->create(['email' => 'dup@example.com', 'name' => 'Old Name']);
 
         Excel::shouldReceive('toArray')->andReturn([[
-            ['name' => 'New Name', 'email' => 'dup@example.com', 'phone' => '0900', 'class' => null, 'note' => null],
+            ['name' => 'New Name', 'email' => 'dup@example.com', 'phone' => '0900', 'class' => null, 'note' => 'New note'],
         ]]);
 
         $this->actingAs($teacher)
@@ -156,6 +156,60 @@ class StudentTest extends TestCase
             ->assertJsonPath('summary.updated', 1);
 
         $this->assertEquals('New Name', $existing->fresh()->name);
+        $this->assertEquals('New note', $existing->fresh()->note);
+    }
+
+    public function test_large_import_without_batch_returns_validation_error_instead_of_timing_out(): void
+    {
+        Excel::fake();
+        $teacher = $this->teacher();
+        $rows = collect(range(1, 101))->map(fn ($i) => [
+            'name' => "Student {$i}",
+            'email' => "student{$i}@example.com",
+            'phone' => null,
+            'class' => null,
+            'note' => null,
+        ])->all();
+
+        Excel::shouldReceive('toArray')->andReturn([$rows]);
+
+        $this->actingAs($teacher)
+            ->postJson('/api/v1/students/import?dry_run=0', [
+                'file' => UploadedFile::fake()->create('students.xlsx', 10),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+
+        $this->assertDatabaseMissing('users', ['email' => 'student1@example.com']);
+    }
+
+    public function test_import_commit_can_process_a_batch_and_keeps_note(): void
+    {
+        Excel::fake();
+        $teacher = $this->teacher();
+
+        Excel::shouldReceive('toArray')->andReturn([[
+            ['name' => 'Skipped', 'email' => 'skip@example.com', 'phone' => '0900', 'class' => null, 'note' => 'skip note'],
+            ['name' => 'Imported', 'email' => 'batch@example.com', 'phone' => '0901', 'class' => null, 'note' => 'Ghi chú import'],
+            ['name' => 'Not reached', 'email' => 'later@example.com', 'phone' => '0902', 'class' => null, 'note' => 'later note'],
+        ]]);
+
+        $this->actingAs($teacher)
+            ->postJson('/api/v1/students/import?dry_run=0', [
+                'file' => UploadedFile::fake()->create('students.xlsx', 10),
+                'offset' => 1,
+                'limit' => 1,
+            ])
+            ->assertOk()
+            ->assertJsonPath('summary.ok', 1);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'batch@example.com',
+            'phone' => '0901',
+            'note' => 'Ghi chú import',
+        ]);
+        $this->assertDatabaseMissing('users', ['email' => 'skip@example.com']);
+        $this->assertDatabaseMissing('users', ['email' => 'later@example.com']);
     }
 
     public function test_student_cannot_access_students_api(): void

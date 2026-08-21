@@ -12,6 +12,12 @@ class Test extends Model
 {
     use HasFactory;
 
+    public const FORMAT_STANDARD = 'standard';
+
+    public const FORMAT_IELTS_SIMULATION = 'ielts_simulation';
+
+    public const FORMATS = [self::FORMAT_STANDARD, self::FORMAT_IELTS_SIMULATION];
+
     protected $fillable = [
         'created_by',
         'category_id',
@@ -19,6 +25,7 @@ class Test extends Model
         'description',
         'slug',
         'skill',
+        'format',
         'is_combo',
         'thumbnail_url',
         'duration_minutes',

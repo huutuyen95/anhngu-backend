@@ -72,6 +72,8 @@ class DeckController extends Controller
 
     public function cards(ListCardsRequest $request, Deck $deck): JsonResponse
     {
-        return ApiResponse::collection(CardResource::collection($this->decks->cards($deck, $request->validated())));
+        $page = $this->decks->cards($deck, $request->validated());
+
+        return ApiResponse::paginated(CardResource::collection($page->items()), $page);
     }
 }

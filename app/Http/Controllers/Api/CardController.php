@@ -6,6 +6,7 @@ use App\Exports\CardsImportTemplateExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Card\ImportCardsRequest;
 use App\Http\Requests\Card\LookupIpaRequest;
+use App\Http\Requests\Card\MoveCardRequest;
 use App\Http\Requests\Card\ReorderCardsRequest;
 use App\Http\Requests\Card\StoreCardRequest;
 use App\Http\Requests\Card\UpdateCardRequest;
@@ -44,6 +45,13 @@ class CardController extends Controller
     public function reorder(ReorderCardsRequest $request, Deck $deck): JsonResponse
     {
         $this->cards->reorder($deck, $request->validated('ids'));
+
+        return ApiResponse::message('Đã cập nhật thứ tự.');
+    }
+
+    public function move(MoveCardRequest $request, Card $card): JsonResponse
+    {
+        $this->cards->move($card, (int) $request->validated('direction'));
 
         return ApiResponse::message('Đã cập nhật thứ tự.');
     }

@@ -14,6 +14,11 @@ class ListCardsRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['q' => ['nullable', 'string', 'max:255'], 'missing' => ['nullable', Rule::in(['audio', 'image', 'ipa', 'example'])]];
+        return [
+            'q' => ['nullable', 'string', 'max:255'],
+            'missing' => ['nullable', Rule::in(['audio', 'image', 'ipa', 'example'])],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ];
     }
 }

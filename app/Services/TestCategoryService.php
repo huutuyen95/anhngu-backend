@@ -12,13 +12,13 @@ class TestCategoryService
     public function __construct(private readonly TestCategoryRepository $categories) {}
 
     /**
-     * Cây thư mục của một lớp (2 cấp) kèm tests_count từng nhánh.
+     * Cây thư mục của một NHÓM (exam|exercise), 2 cấp, kèm tests_count từng nhánh.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function tree(?int $classroomId): array
+    public function tree(string $group): array
     {
-        $roots = $this->categories->roots($classroomId);
+        $roots = $this->categories->roots($group);
 
         return $roots->map(fn (TestCategory $c) => $this->node($c))->all();
     }
@@ -48,7 +48,7 @@ class TestCategoryService
      * @param  array<int, int>  $deletedIds
      * @return array{moved_count: int}
      */
-    public function sync(?int $classroomId, array $categories, array $deletedIds): array
+    public function sync(string $group, array $categories, array $deletedIds): array
     {
         $rows = collect($categories)->map(fn (array $row) => [
             'id' => $row['id'] ?? null,
@@ -57,11 +57,11 @@ class TestCategoryService
             'order' => (int) ($row['order'] ?? 0),
         ])->filter(fn (array $row) => $row['name'] !== '')->all();
 
-        return ['moved_count' => $this->categories->sync($classroomId, $rows, $deletedIds)];
+        return ['moved_count' => $this->categories->sync($group, $rows, $deletedIds)];
     }
 
-    public function uncategorized(?int $classroomId): TestCategory
+    public function uncategorized(string $group): TestCategory
     {
-        return $this->categories->uncategorized($classroomId);
+        return $this->categories->uncategorized($group);
     }
 }

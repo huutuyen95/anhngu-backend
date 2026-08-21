@@ -44,6 +44,28 @@ class CardRepository
             ->update(['order' => DB::raw('CASE id '.implode(' ', $cases).' END')]);
     }
 
+    public function move(Card $card, int $direction): void
+    {
+        DB::transaction(function () use ($card, $direction) {
+            $neighbor = Card::query()
+                ->where('deck_id', $card->deck_id)
+                ->when(
+                    $direction < 0,
+                    fn ($query) => $query->where('order', '<', $card->order)->orderByDesc('order'),
+                    fn ($query) => $query->where('order', '>', $card->order)->orderBy('order'),
+                )
+                ->first();
+
+            if (! $neighbor) {
+                return;
+            }
+
+            $currentOrder = $card->order;
+            $card->update(['order' => $neighbor->order]);
+            $neighbor->update(['order' => $currentOrder]);
+        });
+    }
+
     public function updateMedia(Card $card, string $column, ?string $url): Card
     {
         $card->update([$column => $url]);

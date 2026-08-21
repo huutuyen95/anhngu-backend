@@ -54,6 +54,7 @@ class AdminTestService
             'description' => $data['description'] ?? null,
             'slug' => $this->uniqueSlug($data['title']),
             'skill' => $data['skill'],
+            'format' => $data['format'] ?? Test::FORMAT_STANDARD,
             'is_combo' => $data['is_combo'] ?? false,
             'thumbnail_url' => $data['thumbnail_url'] ?? null,
             'duration_minutes' => $data['duration_minutes'] ?? 60,
@@ -68,7 +69,7 @@ class AdminTestService
 
     public function update(Test $test, array $data): Test
     {
-        $fields = ['title', 'description', 'category_id', 'skill', 'is_combo', 'thumbnail_url', 'duration_minutes', 'total_score', 'scoring_method', 'shuffle_questions', 'word_limit', 'rubric', 'ai_grading', 'is_published'];
+        $fields = ['title', 'description', 'category_id', 'skill', 'format', 'is_combo', 'thumbnail_url', 'duration_minutes', 'total_score', 'scoring_method', 'shuffle_questions', 'word_limit', 'rubric', 'ai_grading', 'is_published'];
         $payload = array_intersect_key($data, array_flip($fields));
         if (array_key_exists('title', $payload) && $payload['title'] !== $test->title) {
             $payload['slug'] = $this->uniqueSlug($payload['title'], $test->id);

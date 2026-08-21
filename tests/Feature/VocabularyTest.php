@@ -219,6 +219,50 @@ class VocabularyTest extends TestCase
             ->assertJsonPath('data.0.id', $withoutExample->id);
     }
 
+    public function test_teacher_card_list_is_paginated_and_keeps_global_order(): void
+    {
+        $deck = $this->makeDeck();
+        foreach (range(1, 31) as $order) {
+            $deck->cards()->create([
+                'order' => $order,
+                'term' => "term {$order}",
+                'meaning' => "meaning {$order}",
+            ]);
+        }
+
+        $this->actingAs($this->teacher)
+            ->getJson("/api/v1/decks/{$deck->id}/cards?page=2&per_page=10")
+            ->assertOk()
+            ->assertJsonCount(10, 'data')
+            ->assertJsonPath('data.0.order', 11)
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.last_page', 4)
+            ->assertJsonPath('meta.from', 11)
+            ->assertJsonPath('meta.to', 20)
+            ->assertJsonPath('meta.total', 31);
+    }
+
+    public function test_teacher_can_move_card_across_page_boundary(): void
+    {
+        $deck = $this->makeDeck();
+        foreach (range(1, 26) as $order) {
+            $deck->cards()->create([
+                'order' => $order,
+                'term' => "term {$order}",
+                'meaning' => "meaning {$order}",
+            ]);
+        }
+        $card25 = $deck->cards()->where('order', 25)->firstOrFail();
+        $card26 = $deck->cards()->where('order', 26)->firstOrFail();
+
+        $this->actingAs($this->teacher)
+            ->patchJson("/api/v1/cards/{$card25->id}/move", ['direction' => 1])
+            ->assertOk();
+
+        $this->assertSame(26, $card25->fresh()->order);
+        $this->assertSame(25, $card26->fresh()->order);
+    }
+
     public function test_import_dry_run_does_not_write_and_commit_autofills_ipa(): void
     {
         $this->seed(IpaDictionarySeeder::class);
