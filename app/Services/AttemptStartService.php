@@ -65,7 +65,7 @@ class AttemptStartService
                     'exam.leave_action' => setting('exam.leave_action', 'warn'),
                     'exam.autosubmit_on_timeout' => (bool) setting('exam.autosubmit_on_timeout', true),
                     'exam.block_copy' => (bool) setting('exam.block_copy', true),
-                    'exam.disable_dictionary' => (bool) setting('exam.disable_dictionary', true),
+                    'exam.disable_dictionary' => (bool) setting('exam.disable_dictionary', false),
                     'grading.method' => setting('grading.method', 'scale_10_even'),
                     'grading.decimals' => (int) setting('grading.decimals', 1),
                     'grading.pass_score' => (float) setting('grading.pass_score', 5.0),

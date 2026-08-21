@@ -41,7 +41,7 @@ class DictionaryService
             if ($entry) {
                 return [
                     'word' => $entry->word,
-                    'ipa' => $entry->ipa,
+                    'ipa' => $this->normalizeIpa($entry->ipa),
                     'pos' => $entry->pos,
                     'meaning_vi' => $entry->meaning_vi,
                     'matched_from' => $cand !== $word ? $word : null,
@@ -50,6 +50,20 @@ class DictionaryService
         }
 
         return null;
+    }
+
+    /**
+     * Trả phiên âm TRẦN, không dấu `/…/`.
+     *
+     * Dữ liệu đến từ hai nguồn ghi khác nhau — bộ soạn tay lưu kèm dấu (`/ˈæp.əl/`), bộ
+     * nạp từ Wiktionary lưu trần (`ˈθɪŋk`). FE luôn tự bọc `/…/` khi hiện, nên nếu không
+     * gọt ở đây thì từ của bộ cũ hiện thành `//ˈæp.əl//`.
+     */
+    private function normalizeIpa(?string $ipa): ?string
+    {
+        $ipa = trim((string) $ipa, "/[] \t");
+
+        return $ipa === '' ? null : $ipa;
     }
 
     public function saveVocab(int $userId, array $data): UserVocab

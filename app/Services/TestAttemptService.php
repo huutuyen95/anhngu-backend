@@ -47,7 +47,7 @@ class TestAttemptService
     {
         $a = $this->attempts->loadState($a);
 
-        return ['id' => $a->id, 'status' => $a->status, 'source' => $a->source, 'mission' => $this->missionContext($a), 'started_at' => $a->started_at] + $this->clockState($a) + ['tab_exit_count' => $a->tab_exit_count, 'tab_exit_limit' => (int) $a->configValue('exam.leave_limit', TestAttempt::TAB_EXIT_LIMIT), 'tab_exit_action' => $a->configValue('exam.leave_action', 'warn'), 'block_copy' => (bool) $a->configValue('exam.block_copy', true), 'autosubmit_on_timeout' => (bool) $a->configValue('exam.autosubmit_on_timeout', true), 'answers' => $a->answers->map(fn (AttemptAnswer $x) => ['question_id' => $x->question_id, 'question_option_id' => $x->question_option_id, 'answer_text' => $x->answer_text, 'answer_file_url' => $x->answer_file_url])->values()];
+        return ['id' => $a->id, 'status' => $a->status, 'source' => $a->source, 'mission' => $this->missionContext($a), 'started_at' => $a->started_at] + $this->clockState($a) + ['tab_exit_count' => $a->tab_exit_count, 'tab_exit_limit' => (int) $a->configValue('exam.leave_limit', TestAttempt::TAB_EXIT_LIMIT), 'tab_exit_action' => $a->configValue('exam.leave_action', 'warn'), 'block_copy' => (bool) $a->configValue('exam.block_copy', true), 'dictionary_enabled' => $this->dictionaryEnabled($a), 'autosubmit_on_timeout' => (bool) $a->configValue('exam.autosubmit_on_timeout', true), 'answers' => $a->answers->map(fn (AttemptAnswer $x) => ['question_id' => $x->question_id, 'question_option_id' => $x->question_option_id, 'answer_text' => $x->answer_text, 'answer_file_url' => $x->answer_file_url])->values()];
     }
 
     public function clockState(TestAttempt $a): array
@@ -81,6 +81,28 @@ class TestAttemptService
         }
 
         return ['tab_exit_count' => $a->tab_exit_count, 'tab_exit_limit' => $limit, 'tab_exit_action' => $action, 'auto_submitted' => false];
+    }
+
+    /**
+     * Có cho bôi đen tra từ điển trong lúc làm bài không.
+     *
+     * Ba nơi em làm bài, phân biệt bằng đúng `classroom_id`:
+     *   - Thư viện (mission_id null, classroom_id null)        → CHO tra
+     *   - Nhiệm vụ em tự thêm (mission_id có, classroom_id null) → CHO tra
+     *   - Bài cô giao ở lớp (classroom_id có)                   → CẤM
+     *
+     * Bài cô giao trong lớp được tính như bài kiểm tra: em phải tự làm, tra nghĩa là làm hộ
+     * bài (nhất là đề đọc hiểu và đề từ vựng). Đây là quy tắc CỨNG, cài đặt không mở được.
+     */
+    private function dictionaryEnabled(TestAttempt $a): bool
+    {
+        if ($a->classroom_id !== null) {
+            return false;
+        }
+
+        // Còn lại thì mặc định cho tra; cô muốn siết thì bật `exam.disable_dictionary`.
+        // Đọc theo snapshot lúc bắt đầu để đổi cài đặt giữa chừng không ảnh hưởng lượt này.
+        return ! (bool) $a->configValue('exam.disable_dictionary', false);
     }
 
     private function missionContext(TestAttempt $a): ?array
