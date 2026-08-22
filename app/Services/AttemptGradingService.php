@@ -83,11 +83,13 @@ class AttemptGradingService
                 'question_count' => $attempt->question_count,
             ], 'graded', keepLatest: true);
 
-            // Báo cho học sinh: bài đã được cô chấm.
-            $attempt->user?->notify(new AttemptGraded(
-                $attempt->test_id, $attempt->id, $attempt->test?->title ?? 'Đề thi',
-                (float) $totalScore, $attempt->classroom_id, $teacher->name,
-            ));
+            // Báo cho học sinh: bài đã được cô chấm (theo cấu hình notify.web + notify.on_graded).
+            if (setting('notify.web', true) && setting('notify.on_graded', true)) {
+                $attempt->user?->notify(new AttemptGraded(
+                    $attempt->test_id, $attempt->id, $attempt->test?->title ?? 'Đề thi',
+                    (float) $totalScore, $attempt->classroom_id, $teacher->name,
+                ));
+            }
 
             return $this->show($attempt);
         });

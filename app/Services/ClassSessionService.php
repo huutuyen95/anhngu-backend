@@ -65,8 +65,8 @@ class ClassSessionService
 
         $updated = $this->sessions->update($session, $attributes);
 
-        // Cô vừa ghi chú buổi → báo cho học sinh trong lớp.
-        if ($noteChanged) {
+        // Cô vừa ghi chú buổi → báo cho học sinh trong lớp (theo notify.web + notify.on_session_open).
+        if ($noteChanged && setting('notify.web', true) && setting('notify.on_session_open', false)) {
             $className = $this->sessions->classroomName($updated);
             foreach ($this->sessions->classroomStudents($updated) as $student) {
                 $student->notify(new SessionNote($updated->classroom_id, $className, $updated->id, $updated->title));

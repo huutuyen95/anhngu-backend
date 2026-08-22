@@ -63,10 +63,20 @@ class TestGradingService
                 'question_count' => $graded['question_count'],
                 'is_new_best' => $isNewBest,
                 'status' => $status,
-                'test' => new TestDetailResource($test, revealAnswers: true),
+                'test' => new TestDetailResource($test, revealAnswers: $this->shouldRevealAnswers($attempt)),
                 'answers' => $graded['answers'],
             ];
         });
+    }
+
+    /** Có lộ đáp án + lời giải không — theo grading.show_explanation (xem TestAttemptController::result). */
+    private function shouldRevealAnswers(TestAttempt $attempt): bool
+    {
+        return match (setting('grading.show_explanation', 'after_submit')) {
+            'never' => false,
+            'after_due' => ($due = $attempt->mission?->due_date) === null || $due->isPast(),
+            default => true,
+        };
     }
 
     /**

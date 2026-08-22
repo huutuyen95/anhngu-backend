@@ -100,7 +100,8 @@ class AssignmentService
 
         app(ClassroomStatsService::class)->forget($classroom);
 
-        $notify = ($data['notify'] ?? true) && $status === 'todo';
+        $notify = ($data['notify'] ?? true) && $status === 'todo'
+            && setting('notify.web', true) && setting('notify.on_assign', true);
 
         // Gửi thông báo cho từng học sinh vừa nhận nội dung mới (gộp 1 thông báo/lần giao).
         if ($notify) {

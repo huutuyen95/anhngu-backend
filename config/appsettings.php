@@ -21,7 +21,7 @@ return [
             'icon' => 'palette',
             'fields' => [
                 'brand.center_name' => ['label' => 'Tên trung tâm', 'hint' => 'Hiển thị trên đầu trang và email.', 'type' => 'string', 'default' => 'Anh ngữ Mrs Uyên', 'required' => true, 'rules' => ['string', 'max:120']],
-                'brand.primary_color' => ['label' => 'Màu chủ đạo', 'hint' => 'Mã màu hex, ví dụ #F2793B.', 'type' => 'string', 'default' => '#F2793B', 'rules' => ['string', 'regex:/^#([0-9a-fA-F]{6})$/']],
+                'brand.primary_color' => ['label' => 'Màu hệ thống', 'hint' => 'Màu chủ đạo của hệ thống (nút, nhấn mạnh) — mã hex, ví dụ #F2793B.', 'type' => 'string', 'default' => '#F2793B', 'rules' => ['string', 'regex:/^#([0-9a-fA-F]{6})$/']],
                 'brand.admin.tab_title' => ['label' => 'Tiêu đề tab (Quản trị)', 'hint' => 'Chữ hiện trên tab trình duyệt khu quản trị.', 'type' => 'string', 'default' => 'Quản trị · Anh ngữ Mrs Uyên', 'rules' => ['string', 'max:120']],
                 'brand.admin.logo' => ['label' => 'Logo khu quản trị', 'hint' => 'PNG/JPG/SVG, ≤ 2MB.', 'type' => 'file', 'default' => null, 'accept' => 'png,jpg,jpeg,svg', 'max_kb' => 2048],
                 'brand.admin.favicon' => ['label' => 'Favicon khu quản trị', 'hint' => 'ICO/PNG/SVG, ≤ 1MB.', 'type' => 'file', 'default' => null, 'accept' => 'ico,png,svg', 'max_kb' => 1024],

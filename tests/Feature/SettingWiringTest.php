@@ -88,4 +88,34 @@ class SettingWiringTest extends TestCase
             ->assertJsonPath('grading.decimals', 2)
             ->assertJsonPath('grading.pass_score', 6.5);
     }
+
+    public function test_show_explanation_never_hides_answers_on_result(): void
+    {
+        $teacher = User::factory()->teacher()->create();
+        $test = Test::create([
+            'created_by' => $teacher->id, 'title' => 'T2', 'slug' => 't2',
+            'skill' => 'reading', 'duration_minutes' => 10, 'total_score' => 10, 'is_published' => true,
+        ]);
+        $part = $test->parts()->create(['order' => 1, 'title' => 'P', 'display_mode' => 'default']);
+        $section = $part->sections()->create(['order' => 1]);
+        $q = $section->questions()->create(['order' => 1, 'type' => 'multiple_choice', 'content' => 'Q', 'score' => 1]);
+        $q->options()->createMany([
+            ['label' => 'A', 'content' => 'A', 'is_correct' => true],
+            ['label' => 'B', 'content' => 'B', 'is_correct' => false],
+        ]);
+        $student = User::factory()->create();
+
+        // Mặc định (after_submit) → lộ đáp án + lời giải.
+        $attempt1 = $this->actingAs($student)->postJson("/api/v1/tests/{$test->id}/attempts")->json('attempt_id');
+        $this->actingAs($student)->postJson("/api/v1/attempts/{$attempt1}/submit");
+        $reveal = json_encode($this->actingAs($student)->getJson("/api/v1/attempts/{$attempt1}/result")->json('test'));
+        $this->assertStringContainsString('is_correct', $reveal);
+
+        // never → không lộ đáp án đúng.
+        $this->setSetting('grading.show_explanation', 'never', 'grading');
+        $attempt2 = $this->actingAs($student)->postJson("/api/v1/tests/{$test->id}/attempts")->json('attempt_id');
+        $this->actingAs($student)->postJson("/api/v1/attempts/{$attempt2}/submit");
+        $hidden = json_encode($this->actingAs($student)->getJson("/api/v1/attempts/{$attempt2}/result")->json('test'));
+        $this->assertStringNotContainsString('is_correct', $hidden);
+    }
 }

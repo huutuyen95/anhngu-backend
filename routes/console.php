@@ -9,4 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Nhắc nhiệm vụ sắp đến hạn — chạy hằng ngày.
-Schedule::command('notifications:deadline-soon')->dailyAt('07:00');
+// Giờ gửi nhắc hằng ngày theo cấu hình notify.daily_send_time (mặc định 19:00).
+Schedule::command('notifications:deadline-soon')->dailyAt(setting('notify.daily_send_time', '19:00'));

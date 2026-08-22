@@ -10,15 +10,24 @@ class SendDeadlineSoonNotifications extends Command
 {
     protected $signature = 'notifications:deadline-soon';
 
-    protected $description = 'Nhắc học sinh các nhiệm vụ sắp đến hạn (trong 2 ngày tới).';
+    protected $description = 'Nhắc học sinh các nhiệm vụ sắp đến hạn (theo notify.remind_before_hours).';
 
     public function handle(): int
     {
+        // Tắt thông báo web → không nhắc gì cả.
+        if (! setting('notify.web', true)) {
+            $this->info('Thông báo web đang tắt (notify.web=false) — bỏ qua.');
+
+            return self::SUCCESS;
+        }
+
+        $hours = (int) setting('notify.remind_before_hours', 24);
+
         $missions = Mission::query()
             ->whereNotNull('due_date')
             ->whereNull('deadline_notified_at')
             ->where('status', '!=', 'done')
-            ->whereBetween('due_date', [now()->startOfDay(), now()->addDays(2)->endOfDay()])
+            ->whereBetween('due_date', [now()->startOfDay(), now()->addHours($hours)])
             ->with(['missionable', 'classroom:id,name', 'user'])
             ->get();
 

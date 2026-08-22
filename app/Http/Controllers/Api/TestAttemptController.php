@@ -55,9 +55,23 @@ class TestAttemptController extends Controller
     public function result(OwnedAttemptRequest $request, TestAttempt $attempt)
     {
         $r = $this->attempts->result($attempt);
-        $r['test'] = new TestDetailResource($r['test'], revealAnswers: true);
+        $r['test'] = new TestDetailResource($r['test'], revealAnswers: $this->shouldRevealAnswers($attempt));
 
         return response()->json($r);
+    }
+
+    /**
+     * Có lộ đáp án + lời giải ở trang kết quả không — theo cấu hình grading.show_explanation:
+     * after_submit (mặc định) luôn hiện; never không bao giờ; after_due chỉ hiện khi đã qua hạn
+     * nộp của nhiệm vụ (tự luyện không có hạn → coi như đã qua).
+     */
+    private function shouldRevealAnswers(TestAttempt $attempt): bool
+    {
+        return match (setting('grading.show_explanation', 'after_submit')) {
+            'never' => false,
+            'after_due' => ($due = $attempt->mission?->due_date) === null || $due->isPast(),
+            default => true,
+        };
     }
 
     public function show(OwnedAttemptRequest $request, TestAttempt $attempt)
