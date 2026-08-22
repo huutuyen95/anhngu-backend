@@ -19,6 +19,9 @@ class SettingService
 
     public const SECRET_MASK = '••••••••';
 
+    /** Memo trong 1 request: tránh GET Redis lặp lại mỗi lần gọi setting(). Xoá ở flush(). */
+    private ?array $memo = null;
+
     public function __construct(private readonly SettingRepository $repository) {}
 
     /** Toàn bộ schema (nhóm + field) từ config/appsettings.php. */
@@ -45,10 +48,10 @@ class SettingService
         return $this->fields()[$key] ?? null;
     }
 
-    /** Mảng key => giá trị đã cast (default + đè bởi DB), có cache. */
+    /** Mảng key => giá trị đã cast (default + đè bởi DB). Redis (forever) + memo trong request. */
     public function all(): array
     {
-        return Cache::rememberForever(self::CACHE_KEY, function () {
+        return $this->memo ??= Cache::rememberForever(self::CACHE_KEY, function () {
             $fields = $this->fields();
             $rows = $this->repository->values();
 
@@ -155,6 +158,7 @@ class SettingService
 
     public function flush(): void
     {
+        $this->memo = null;
         Cache::forget(self::CACHE_KEY);
     }
 

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Deck;
 use App\Models\Document;
 use App\Models\Test;
+use App\Services\SettingService;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\ServiceProvider;
@@ -16,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // 1 instance/request (tự reset giữa các request/job) để memo cấu hình trong request:
+        // cả request chỉ chạm Redis 1 lần thay vì mỗi lần gọi setting().
+        $this->app->scoped(SettingService::class);
     }
 
     /**
