@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Classroom;
+use App\Notifications\MissionAssigned;
 use App\Models\Deck;
 use App\Models\Document;
 use App\Models\Test;
@@ -51,9 +52,10 @@ class AssignmentService
 
         $created = 0;
         $duplicates = 0;
+        $createdByStudent = [];
 
         $this->assignments->transaction(function () use (
-            $classroom, $session, $data, $teacher, $active, $status, $scheduledAt, &$created, &$duplicates
+            $classroom, $session, $data, $teacher, $active, $status, $scheduledAt, &$created, &$duplicates, &$createdByStudent
         ) {
             foreach ($data['items'] as $item) {
                 $modelClass = self::TYPE_MAP[$item['type']] ?? null;
@@ -91,6 +93,7 @@ class AssignmentService
                         'scheduled_at' => $scheduledAt,
                     ]);
                     $created++;
+                    $createdByStudent[$student->id] = ($createdByStudent[$student->id] ?? 0) + 1;
                 }
             }
         });
@@ -98,6 +101,16 @@ class AssignmentService
         app(ClassroomStatsService::class)->forget($classroom);
 
         $notify = ($data['notify'] ?? true) && $status === 'todo';
+
+        // Gửi thông báo cho từng học sinh vừa nhận nội dung mới (gộp 1 thông báo/lần giao).
+        if ($notify) {
+            foreach ($active as $student) {
+                $count = $createdByStudent[$student->id] ?? 0;
+                if ($count > 0) {
+                    $student->notify(new MissionAssigned($classroom->id, $classroom->name, $count, $session->id, $teacher->name));
+                }
+            }
+        }
 
         return [
             'created' => $created,

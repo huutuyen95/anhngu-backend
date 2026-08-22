@@ -24,6 +24,7 @@ class Mission extends Model
         'attempts_allowed',
         'scheduled_at',
         'completed_at',
+        'deadline_notified_at',
     ];
 
     protected function casts(): array

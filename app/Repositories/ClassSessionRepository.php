@@ -21,6 +21,19 @@ class ClassSessionRepository
         return $c->students()->count();
     }
 
+    /** Học sinh của lớp chứa buổi này (để gửi thông báo ghi chú). */
+    public function classroomStudents(ClassSession $session): Collection
+    {
+        return $session->classroom
+            ? $session->classroom->students()->get()
+            : collect();
+    }
+
+    public function classroomName(ClassSession $session): string
+    {
+        return $session->classroom?->name ?? '';
+    }
+
     public function sessions(Classroom $c): Collection
     {
         return $c->sessions()->withCount('items')->get();

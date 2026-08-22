@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\QuestionType;
+use App\Notifications\AttemptGraded;
 use App\Models\Question;
 use App\Models\TestAttempt;
 use App\Models\User;
@@ -81,6 +82,12 @@ class AttemptGradingService
                 'correct_count' => $correctCount,
                 'question_count' => $attempt->question_count,
             ], 'graded', keepLatest: true);
+
+            // Báo cho học sinh: bài đã được cô chấm.
+            $attempt->user?->notify(new AttemptGraded(
+                $attempt->test_id, $attempt->id, $attempt->test?->title ?? 'Đề thi',
+                (float) $totalScore, $attempt->classroom_id, $teacher->name,
+            ));
 
             return $this->show($attempt);
         });

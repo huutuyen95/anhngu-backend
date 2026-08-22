@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\StudentArticleController;
 use App\Http\Controllers\Api\StudentClassroomController;
 use App\Http\Controllers\Api\StudentReportController;
+use App\Http\Controllers\Api\StudentNotificationController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\StudentDeckController;
 use App\Http\Controllers\Api\StudentDocumentController;
@@ -66,6 +67,10 @@ Route::prefix('v1')->group(function () {
         // Lớp của em — khu học sinh
         Route::get('me/classrooms', [StudentClassroomController::class, 'index']);
         Route::get('me/report', [StudentReportController::class, 'show']);
+        Route::get('me/notifications', [StudentNotificationController::class, 'index']);
+        Route::get('me/notifications/unread-count', [StudentNotificationController::class, 'unreadCount']);
+        Route::post('me/notifications/read-all', [StudentNotificationController::class, 'markAllRead']);
+        Route::post('me/notifications/{id}/read', [StudentNotificationController::class, 'markRead']);
         Route::get('classrooms/{classroom}/roadmap', [StudentClassroomController::class, 'roadmap']);
 
         // Tài liệu & Bài giảng — khu học sinh

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Classroom;
 use App\Models\ClassSession;
+use App\Notifications\SessionNote;
 use App\Repositories\ClassSessionRepository;
 use Illuminate\Support\Collection;
 
@@ -54,13 +55,25 @@ class ClassSessionService
      */
     public function update(ClassSession $session, array $data): ClassSession
     {
+        $noteChanged = array_key_exists('note', $data) && filled($data['note']) && $data['note'] !== $session->note;
+
         $attributes = array_filter([
             'title' => $data['title'] ?? null,
             'note' => $data['note'] ?? null,
             'held_on' => $data['held_on'] ?? null,
         ], fn ($k) => array_key_exists($k, $data), ARRAY_FILTER_USE_KEY);
 
-        return $this->sessions->update($session, $attributes);
+        $updated = $this->sessions->update($session, $attributes);
+
+        // Cô vừa ghi chú buổi → báo cho học sinh trong lớp.
+        if ($noteChanged) {
+            $className = $this->sessions->classroomName($updated);
+            foreach ($this->sessions->classroomStudents($updated) as $student) {
+                $student->notify(new SessionNote($updated->classroom_id, $className, $updated->id, $updated->title));
+            }
+        }
+
+        return $updated;
     }
 
     public function delete(ClassSession $session): void
